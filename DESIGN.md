@@ -12,10 +12,9 @@ queue is in an inconsistent state (e.g. the tail is lagging), it helps fix it be
 Michael and Scott handwave away memory management ("we assume garbage collection") but since we are using C++, we face
 two problems:
 
-**The ABA problem**: A pointer is freed and reallocated to the same address, causing a 
-compare-and-swap operation to succeed when it shouldn't. Our original implementation used tagged pointers to address 
-this issue; the upper 16 bits of each pointer stored a version counter that increments on each CAS, so even if an
-address is reused, the tag differs.
+**The ABA problem**: A pointer is freed and reallocated to the same address, causing a compare-and-swap operation to 
+succeed when it shouldn't. Hazard pointers solve this problem implicitly; a protected node cannot be freed, so its
+address cannot be reused while any thread holds a reference to it.
 
 **Use-after-free**: A thread may load a pointer, get preëmpted, and another thread frees that node before the first 
 thread dereferences it. Tagged pointers don't help here; the dereference happens _before_ the CAS.
@@ -65,8 +64,8 @@ the hazard registry, see nothing, and delete the node before we reload, causing 
 
 ### Limitations
 Our implementation has the following limitations:
-1. The bump allocator never reclaims memory, so slots can be exhausted on thread exit.
-3. The queue destructor assumes no concurrent operations.
+1. If a thread exits with nodes in its retired list, those nodes are leaked.
+2. The queue destructor assumes no concurrent operations.
 
 ## Benchmarks
 The following results are wall-clock times per operation, recorded on a Apple M1 processor.
@@ -75,19 +74,24 @@ The following results are wall-clock times per operation, recorded on a Apple M1
 
 | Threads | Lock-Free Enqueue | Mutex Enqueue | Lock-Free Mixed | Mutex Mixed |
 |---------|-------------------|---------------|-----------------|-------------|
-| 1       | 13.2 ns           | 9.71 ns       | 12.9 ns         | 10.3 ns     |
-| 2       | 77.2 ns           | 33.6 ns       | 57.4 ns         | 31.1 ns     |
-| 4       | 255 ns            | 110 ns        | 205 ns          | 142 ns      |
-| 8       | 943 ns            | 284 ns        | 991 ns          | 276 ns      |
+| 1       | 14.3 ns           | 9.69 ns       | 13.3 ns         | 10.9 ns     |
+| 2       | 105 ns            | 34.0 ns       | 43.1 ns         | 33.4 ns     |
+| 4       | 612 ns            | 109 ns        | 188 ns          | 99.8 ns     |
+| 8       | 1964 ns           | 318 ns        | 960 ns          | 270 ns      |
 
 The lock-free queue is generally less performant than the mutex-based queue. This is due to the following reasons:
+- The lock-free queue includes hazard pointer overhead: sequentially consistent memory ordering on every protect
+operation and periodic scanning of the hazard registry during retirement.
 - The mutex queue has a small critical region: just a single `push` or `pop` operation on a `std::queue`, which involves
 a handful of pointer manipulations and maybe an amortized allocation. The lock is therefore held for nanoseconds at most,
-so threads rarely ended up in contention.
+so threads rarely end up in contention.
 - The lock-free queue has increased memory allocation overhead: `jglockfree::Queue` allocates a `jglockfree::Node` for 
 each item in the queue, whereas `std::queue` amortizes allocation
 - On the ARM architecture specifically, compare-and-swap operations are implemented using LL/SC 
 (Load-Linked/Store-Conditional), which can spuriously fail under contention, causing more CAS retries.
+
+We mitigate false sharing by using `alignas(std::hardware_destructive_interference_size)` on the head and tail of the
+queue to place them on separate cache lines.
 
 Lock-free queues still confer advantages such as non-blocking guarantees, lack of priority inversion, and bounded 
 worst-case latency per operation (no thread can block another indefinitely).
