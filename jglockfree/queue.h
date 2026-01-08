@@ -29,11 +29,12 @@ public:
   }
 
   void Enqueue(const T value) {
+    thread_local HazardPointer hp_tail;
     auto node = new Node(std::move(value));
 
     while (true) {
       auto old_tail = tail_.load(std::memory_order_relaxed);
-      Node *old_tail_ptr  = GetPtr(old_tail);
+      auto *old_tail_ptr = hp_tail.Protect<Node>(tail_, GetPtr);
       auto next = old_tail_ptr->next.load(std::memory_order_acquire);
 
       if (old_tail == tail_.load(std::memory_order_relaxed)) {
@@ -51,6 +52,7 @@ public:
                 std::memory_order_release,
                 std::memory_order_relaxed
                 );
+            hp_tail.Clear();
             return;
           }
         } else {

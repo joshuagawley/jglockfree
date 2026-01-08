@@ -66,8 +66,6 @@ the hazard registry, see nothing, and delete the node before we reload, causing 
 ### Limitations
 Our implementation has the following limitations:
 1. The bump allocator never reclaims memory, so slots can be exhausted on thread exit.
-2. `Enqueue()` doesn't use hazard pointers. The tail node is never freed while it's still reachable via `tail_`; only 
-head nodes are retired, and only after being unlinked.
 3. The queue destructor assumes no concurrent operations.
 
 ## Benchmarks
