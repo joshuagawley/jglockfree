@@ -6,6 +6,7 @@
 #include "hazard_pointer.h"
 
 #include <atomic>
+#include <new>
 #include <optional>
 
 namespace jglockfree {
@@ -28,8 +29,8 @@ private:
     explicit constexpr Node(T value) : value(std::move(value)), next(nullptr) {}
   };
 
-  std::atomic<Node *> head_;
-  std::atomic<Node *> tail_;
+  alignas(std::hardware_destructive_interference_size) std::atomic<Node *> head_;
+  alignas(std::hardware_destructive_interference_size) std::atomic<Node *> tail_;
 };
 
 template <typename T>
