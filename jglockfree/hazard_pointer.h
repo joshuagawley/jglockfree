@@ -9,18 +9,12 @@
 
 namespace jglockfree {
 
-inline constexpr std::size_t kMaxHazardPointers{128};
-inline constinit std::array<std::atomic<void *>, kMaxHazardPointers> kSlots{};
-inline constinit std::atomic<std::size_t> kNextSlot{0};
-
-inline std::mutex kFreeListGuard{};
-inline constinit std::vector<std::size_t> kFreeList{};
-
 struct RetiredNode {
   void *ptr;
   void (*deleter)(void *);
 };
 
+template <std::size_t NumSlots = 128>
 class HazardPointer {
 public:
   HazardPointer();
@@ -39,38 +33,47 @@ public:
 
 private:
   static void Scan();
+  
+  static inline std::array<std::atomic<void *>, NumSlots> slots_{};
+  static inline std::atomic<std::size_t> next_slot_{0};
+
+  static inline std::mutex free_list_guard_{};
+  static inline std::vector<std::size_t> free_list_{};
+
+  thread_local static inline std::vector<RetiredNode> retired_;
+  static constexpr std::size_t kRetireThreshold = 2 * NumSlots;
 
   std::atomic<void *> *slot_{nullptr};
   std::size_t slot_index_{};
-
-  static constexpr std::size_t kRetireThreshold = 2 * kMaxHazardPointers;
-  thread_local static inline std::vector<RetiredNode> retired_;
 };
 
-inline HazardPointer::HazardPointer() {
+template <std::size_t NumSlots>
+inline HazardPointer<NumSlots>::HazardPointer() {
   {
-    std::lock_guard lock{kFreeListGuard};
-    if (not kFreeList.empty()) {
-      slot_index_ = kFreeList.back();
-      kFreeList.pop_back();
+    std::lock_guard lock{free_list_guard_};
+    if (not free_list_.empty()) {
+      slot_index_ = free_list_.back();
+      free_list_.pop_back();
     } else {
-      slot_index_ = kNextSlot.fetch_add(1, std::memory_order_relaxed);
-      if (slot_index_ >= kMaxHazardPointers) {
+      slot_index_ = next_slot_.fetch_add(1, std::memory_order_relaxed);
+      if (slot_index_ >= NumSlots) {
         throw std::runtime_error("Hazard pointer slots exhausted");
       }
     }
   }
-  slot_ = &kSlots[slot_index_];
+  slot_ = &slots_[slot_index_];
 }
 
-inline HazardPointer::~HazardPointer() noexcept {
+template <std::size_t NumSlots>
+inline HazardPointer<NumSlots>::~HazardPointer() noexcept {
   Clear();
-  std::lock_guard lock{kFreeListGuard};
-  kFreeList.push_back(slot_index_);
+  std::lock_guard lock{free_list_guard_};
+  free_list_.push_back(slot_index_);
 }
 
+template <std::size_t NumSlots>
 template <typename T>
-constexpr T *HazardPointer::Protect(std::atomic<T *> &source) noexcept {
+constexpr T *HazardPointer<NumSlots>::Protect(std::atomic<T *> &source) noexcept {
   while (true) {
     const auto ptr = source.load(std::memory_order_acquire);
     slot_->store(ptr, std::memory_order_seq_cst);
@@ -81,34 +84,38 @@ constexpr T *HazardPointer::Protect(std::atomic<T *> &source) noexcept {
   }
 }
 
-constexpr void HazardPointer::Clear() const noexcept {
+template <std::size_t NumSlots>
+constexpr void HazardPointer<NumSlots>::Clear() const noexcept {
   slot_->store(nullptr, std::memory_order_release);
 }
 
+template <std::size_t NumSlots>
 template <typename T>
-constexpr bool HazardPointer::IsProtected(T *ptr) noexcept {
-  const auto count = kNextSlot.load(std::memory_order_acquire);
+constexpr bool HazardPointer<NumSlots>::IsProtected(T *ptr) noexcept {
+  const auto count = next_slot_.load(std::memory_order_acquire);
   return std::ranges::any_of(
       std::ranges::views::iota(std::size_t{0}, count),
       [ptr](auto i) {
-        return kSlots[i].load(std::memory_order_acquire) == ptr;
+        return slots_[i].load(std::memory_order_acquire) == ptr;
       });
 }
 
+template <std::size_t NumSlots>
 template <typename T>
-void HazardPointer::Retire(T *ptr) {
+void HazardPointer<NumSlots>::Retire(T *ptr) {
   retired_.emplace_back(ptr, [](void *p) { delete static_cast<T *>(p); });
   if (retired_.size() >= kRetireThreshold) {
     Scan();
   }
 }
 
-inline void HazardPointer::Scan() {
-  const auto count = kNextSlot.load(std::memory_order_acquire);
+template <std::size_t NumSlots>
+inline void HazardPointer<NumSlots>::Scan() {
+  const auto count = next_slot_.load(std::memory_order_acquire);
   const auto loads =
       std::ranges::views::iota(std::size_t{0}, count) |
       std::views::transform([](auto i) {
-        return kSlots[i].load(std::memory_order_acquire);
+        return slots_[i].load(std::memory_order_acquire);
       });
   const std::unordered_set<void *> protected_ptrs(loads.begin(), loads.end());
 

@@ -49,7 +49,7 @@ TEST(HazardPointerTest, IsProtectedReturnsTrueForProtectedPointer) {
   jglockfree::HazardPointer hp;
   hp.Protect(source);
 
-  EXPECT_TRUE(jglockfree::HazardPointer::IsProtected(&node));
+  EXPECT_TRUE(jglockfree::HazardPointer<>::IsProtected(&node));
   hp.Clear();
 }
 
@@ -61,7 +61,7 @@ TEST(HazardPointerTest, IsProtectedReturnsFalseAfterClear) {
   hp.Protect(source);
   hp.Clear();
 
-  EXPECT_FALSE(jglockfree::HazardPointer::IsProtected(&node));
+  EXPECT_FALSE(jglockfree::HazardPointer<>::IsProtected(&node));
 }
 
 TEST(HazardPointerTest, IsProtectedReturnsFalseForUnprotectedPointer) {
@@ -72,7 +72,7 @@ TEST(HazardPointerTest, IsProtectedReturnsFalseForUnprotectedPointer) {
   jglockfree::HazardPointer hp;
   hp.Protect(source);
 
-  EXPECT_FALSE(jglockfree::HazardPointer::IsProtected(&node_b));
+  EXPECT_FALSE(jglockfree::HazardPointer<>::IsProtected(&node_b));
   hp.Clear();
 }
 
@@ -85,7 +85,7 @@ TEST(HazardPointerTest, ClearIsIdempotent) {
   hp.Clear();
   hp.Clear();  // Should not crash or misbehave
 
-  EXPECT_FALSE(jglockfree::HazardPointer::IsProtected(&node));
+  EXPECT_FALSE(jglockfree::HazardPointer<>::IsProtected(&node));
 }
 
 // This test is probabilistic - it may not catch bugs reliably,
