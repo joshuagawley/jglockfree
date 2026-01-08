@@ -66,6 +66,7 @@ inline HazardPointer<NumSlots>::HazardPointer() {
 
 template <std::size_t NumSlots>
 inline HazardPointer<NumSlots>::~HazardPointer() noexcept {
+  Scan();
   Clear();
   std::lock_guard lock{free_list_guard_};
   free_list_.push_back(slot_index_);
