@@ -3,6 +3,9 @@
 #ifndef JGLOCKFREE_INCLUDE_QUEUE_H_
 #define JGLOCKFREE_INCLUDE_QUEUE_H_
 
+#include "hazard_pointer.h"
+
+
 #include <atomic>
 #include <cstdint>
 #include <optional>
@@ -64,22 +67,29 @@ public:
     }
   }
   std::optional<T> Dequeue() {
+    thread_local HazardPointer hp_head;
+    thread_local HazardPointer hp_next;
     for (;;) {
       auto old_head = head_.load(std::memory_order_relaxed);
       auto old_tail = tail_.load(std::memory_order_relaxed);
-      auto *old_head_ptr = GetPtr(old_head);
-      auto next = old_head_ptr->next.load(std::memory_order_acquire);
+      auto *old_head_ptr = hp_head.Protect<Node>(head_, GetPtr);
+      auto *next_ptr = hp_next.Protect<Node>(old_head_ptr->next, GetPtr);
+      auto next_tagged = old_head_ptr->next.load(std::memory_order_relaxed);
 
       if (old_head == head_.load(std::memory_order_acquire)) {
         if (old_head == old_tail) {
-          if (GetPtr(next) == nullptr) {
+          if (next_ptr == nullptr) {
+            hp_head.Clear();
+            hp_next.Clear();
             return std::nullopt;
           }
-            tail_.compare_exchange_weak(old_tail, Pack(GetPtr(next), GetTag(old_tail) + 1), std::memory_order_release, std::memory_order_relaxed);
+            tail_.compare_exchange_weak(old_tail, Pack(next_ptr, GetTag(next_tagged) + 1), std::memory_order_release, std::memory_order_relaxed);
         } else {
-          auto value = GetPtr(next)->value;
-          if (head_.compare_exchange_weak(old_head, Pack(GetPtr(next), GetTag(old_head) + 1), std::memory_order_release, std::memory_order_relaxed)) {
-            delete old_head_ptr;
+          auto value = next_ptr->value;
+          if (head_.compare_exchange_weak(old_head, Pack(next_ptr, GetTag(old_head) + 1), std::memory_order_release, std::memory_order_relaxed)) {
+            hp_head.Retire(old_head_ptr);
+            hp_head.Clear();
+            hp_next.Clear();
             return value;
           }
         }

@@ -39,6 +39,12 @@ function(
         list(APPEND COMPILE_FLAGS -Werror)
     endif ()
 
+    if (ENABLE_ASAN)
+        message(TRACE "AddressSanitizer enabled")
+        list(APPEND COMPILE_FLAGS -fsanitize=address)
+        list(APPEND LINK_FLAGS -fsanitize=address)
+    endif ()
+
     if (ENABLE_TSAN)
         message(TRACE "ThreadSanitizer enabled")
         list(APPEND COMPILE_FLAGS -fsanitize=thread)

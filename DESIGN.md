@@ -8,10 +8,67 @@ The dummy node ensures that the head and tail point to different nodes when the 
 on the tail) and dequeuers (working on the head) don't compete for the same pointer. When the thread notices that the
 queue is in an inconsistent state (e.g. the tail is lagging), it helps fix it before proceeding.
 
-The M&S paper handwaves away memory management ("we assume garbage collection") but since we are using C++, we face
-tackling the ABA problem. The ABA problem is when a pointer is freed and reallocated to the same address, causing a 
-compare-and-swap operation to succeed when it shouldn't. We use tagged pointers to address this issue, although our implementation does potentially
-introduce a use-after-free error. A production-quality implementation would use a solution such as a hazard pointer.
+## Memory reclamation
+Michael and Scott handwave away memory management ("we assume garbage collection") but since we are using C++, we face
+two problems:
+
+**The ABA problem**: A pointer is freed and reallocated to the same address, causing a 
+compare-and-swap operation to succeed when it shouldn't. Our original implementation used tagged pointers to address 
+this issue; the upper 16 bits of each pointer stored a version counter that increments on each CAS, so even if an
+address is reused, the tag differs.
+
+**Use-after-free**: A thread may load a pointer, get preëmpted, and another thread frees that node before the first 
+thread dereferences it. Tagged pointers don't help here; the dereference happens _before_ the CAS.
+
+| Thread A (dequeuing)                     | Thread B (dequeuing)           |
+|------------------------------------------|--------------------------------|
+| Load head → node X                       |                                |
+| Get the raw pointer to X                 |                                |
+|                                          | Load head -> node X            |
+|                                          | Load X.head -> node Y          |
+|                                          | CAS succeeds, swings head to Y |
+|                                          | X is freed                     |
+| Load X.head -> node Y, so use after free |                                |
+
+We solve this using hazard pointers.
+
+## Hazard pointers
+Hazard pointers are a mechanism for preventing use-after-free bugs. The concept is that you announce your intention to
+read a pointer before you dereference it, and don't free nodes that anyone has announced.
+
+**Reader protocol**:
+1. Load the pointer
+2. Publish it to a global registry of hazard pointers
+3. Re-check that the pointer is still valid (i.e. it hasn't changed at source)
+4. Only then dereference it
+5. Clear the hazard pointer from the registry when done
+
+**Deleter protocol**:
+1. Don't delete the pointer immediately
+2. Move retired nodes to a private "to-delete" list
+3. Periodically scan all hazard pointers
+4. Only free nodes that no thread has announced
+
+This works because if verification succeeds, the node is still reachable. Any deleter that unlinks it _must_ see the 
+reader's announcement before freeing.
+
+### Memory ordering
+In the `Protect()` function (where we execute the reader protocol), we use sequentially consistent memory ordering when
+storing the source pointer in the next available slot and reloading the pointer from source: On x86 processors, we could 
+```c++
+slot_->store(ptr, std::memory_order_seq_cst);
+auto current = source.load(std::memory_order_seq_cst);
+```
+On x86, acquire/release semantics would have sufficed here, since since on x86, stores are not reordered with subsequent 
+loads. On ARM, however, such a reordering is permitted. If the reload comes before the store, then a deleter could scan
+the hazard registry, see nothing, and delete the node before we reload, causing us to dereference freed memory.
+
+### Limitations
+Our implementation has the following limitations:
+1. The bump allocator never reclaims memory, so slots can be exhausted on thread exit.
+2. `Enqueue()` doesn't use hazard pointers. The tail node is never freed while it's still reachable via `tail_`; only 
+head nodes are retired, and only after being unlinked.
+3. The queue destructor assumes no concurrent operations.
 
 ## Benchmarks
 The following results are wall-clock times per operation, recorded on a Apple M1 processor.
@@ -42,3 +99,7 @@ At the cost of bounding the size of the queue, one could use a _ring buffer_ ins
 a circular array rather than a linked list as the underlying data structure, so we get the obvious cache locality 
 benefits and predictable memory usage from the array layout, as well as avoiding allocation in the hot path. 
 Ring buffers are common in latency-critical applications such as trading systems.
+
+## Further Reading
+- Michael, M. M. and Scott, M. L., "Simple, Fast, and Practical Non-Blocking and Blocking Concurrent Queue Algorithms" (PODC 1996)
+- Michael, M. M., "Hazard Pointers: Safe Memory Reclamation for Lock-Free Objects" (IEEE TPDS 2004)

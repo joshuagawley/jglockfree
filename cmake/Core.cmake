@@ -1,4 +1,5 @@
 option(WARNINGS_AS_ERRORS "Treat compiler warnings as errors" OFF)
+option(ENABLE_ASAN "Enable AddressSanitizer" OFF)
 option(ENABLE_TSAN "Enable ThreadSanitizer" OFF)
 option(RUN_BENCHMARKS "Run benchmarks" OFF)
 
