@@ -1,0 +1,2 @@
+add_executable(queue_benchmark mutex_queue.h queue_benchmark.cc)
+target_link_libraries(queue_benchmark PRIVATE project_settings jglockfree benchmark::benchmark_main)
