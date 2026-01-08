@@ -42,19 +42,6 @@ public:
     }
   }
 
-  template <typename T, typename Extractor>
-  T* Protect(std::atomic<uint64_t>& source, Extractor extract) {
-     while (true) {
-       const auto tagged = source.load(std::memory_order_acquire);
-       const auto ptr = extract(tagged);
-       slot_->store(ptr, std::memory_order_seq_cst);
-       const auto current = source.load(std::memory_order_seq_cst);
-       if (tagged == current) {
-         return ptr;
-       }
-     }
-   }
-
   constexpr void Clear() const {
     slot_->store(nullptr, std::memory_order_release);
   }
