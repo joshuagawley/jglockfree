@@ -3,40 +3,43 @@
 #ifndef JGLOCKFREE_INCLUDE_QUEUE_H_
 #define JGLOCKFREE_INCLUDE_QUEUE_H_
 
-#include "hazard_pointer.h"
-
 #include <atomic>
 #include <new>
 #include <optional>
+
+#include "hazard_pointer.h"
 
 namespace jglockfree {
 
 template <typename T>
 class Queue {
-public:
+ public:
   Queue();
   ~Queue() noexcept;
 
-  Queue(const Queue&) = delete;
-  Queue& operator=(const Queue&) = delete;
+  Queue(const Queue &) = delete;
+  Queue &operator=(const Queue &) = delete;
 
-  Queue(Queue&&) = delete;
-  Queue& operator=(Queue&&) = delete;
+  Queue(Queue &&) = delete;
+  Queue &operator=(Queue &&) = delete;
 
   void Enqueue(T value);
   std::optional<T> Dequeue() noexcept;
 
-private:
+ private:
   struct Node {
     T value;
     std::atomic<Node *> next;
 
     constexpr Node() noexcept : next(nullptr) {}
-    explicit constexpr Node(T value) noexcept : value(std::move(value)), next(nullptr) {}
+    explicit constexpr Node(T value) noexcept
+        : value(std::move(value)), next(nullptr) {}
   };
 
-  alignas(std::hardware_destructive_interference_size) std::atomic<Node *> head_;
-  alignas(std::hardware_destructive_interference_size) std::atomic<Node *> tail_;
+  alignas(
+      std::hardware_destructive_interference_size) std::atomic<Node *> head_;
+  alignas(
+      std::hardware_destructive_interference_size) std::atomic<Node *> tail_;
 };
 
 template <typename T>
@@ -69,26 +72,20 @@ void Queue<T>::Enqueue(T value) {
       if (next == nullptr) {
         // Try to link new node
         if (old_tail_ptr->next.compare_exchange_weak(
-          next,
-          node,
-          std::memory_order_release,
-          std::memory_order_relaxed)) {
+                next, node, std::memory_order_release,
+                std::memory_order_relaxed)) {
           // Try to swing tail forward
-          tail_.compare_exchange_weak(
-              old_tail_ptr,
-              node,
-              std::memory_order_release,
-              std::memory_order_relaxed);
+          tail_.compare_exchange_weak(old_tail_ptr, node,
+                                      std::memory_order_release,
+                                      std::memory_order_relaxed);
           hp_tail.Clear();
           return;
         }
       } else {
         // Tail is lagging, help advance it
-        tail_.compare_exchange_weak(
-            old_tail_ptr,
-            next,
-            std::memory_order_release,
-            std::memory_order_relaxed);
+        tail_.compare_exchange_weak(old_tail_ptr, next,
+                                    std::memory_order_release,
+                                    std::memory_order_relaxed);
       }
     }
   }
@@ -111,18 +108,14 @@ std::optional<T> Queue<T>::Dequeue() noexcept {
           hp_next.Clear();
           return std::nullopt;
         }
-        tail_.compare_exchange_weak(
-            old_tail_ptr,
-            next_ptr,
-            std::memory_order_release,
-            std::memory_order_relaxed);
+        tail_.compare_exchange_weak(old_tail_ptr, next_ptr,
+                                    std::memory_order_release,
+                                    std::memory_order_relaxed);
       } else {
         auto value = next_ptr->value;
-        if (head_.compare_exchange_weak(
-            old_head_ptr,
-            next_ptr,
-            std::memory_order_release,
-            std::memory_order_relaxed)) {
+        if (head_.compare_exchange_weak(old_head_ptr, next_ptr,
+                                        std::memory_order_release,
+                                        std::memory_order_relaxed)) {
           hp_head.Retire(old_head_ptr);
           hp_head.Clear();
           hp_next.Clear();
@@ -133,6 +126,6 @@ std::optional<T> Queue<T>::Dequeue() noexcept {
   }
 }
 
-} // namespace jglockfree
+}  // namespace jglockfree
 
-#endif // JGLOCKFREE_INCLUDE_QUEUE_H_
+#endif  // JGLOCKFREE_INCLUDE_QUEUE_H_

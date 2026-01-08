@@ -16,7 +16,7 @@ struct RetiredNode {
 
 template <std::size_t NumSlots = 128>
 class HazardPointer {
-public:
+ public:
   HazardPointer();
   ~HazardPointer() noexcept;
 
@@ -31,9 +31,9 @@ public:
   template <typename T>
   static void Retire(T *ptr);
 
-private:
+ private:
   static void Scan();
-  
+
   static inline std::array<std::atomic<void *>, NumSlots> slots_{};
   static inline std::atomic<std::size_t> next_slot_{0};
 
@@ -73,7 +73,8 @@ inline HazardPointer<NumSlots>::~HazardPointer() noexcept {
 
 template <std::size_t NumSlots>
 template <typename T>
-constexpr T *HazardPointer<NumSlots>::Protect(std::atomic<T *> &source) noexcept {
+constexpr T *HazardPointer<NumSlots>::Protect(
+    std::atomic<T *> &source) noexcept {
   while (true) {
     const auto ptr = source.load(std::memory_order_acquire);
     slot_->store(ptr, std::memory_order_seq_cst);
@@ -94,8 +95,7 @@ template <typename T>
 constexpr bool HazardPointer<NumSlots>::IsProtected(T *ptr) noexcept {
   const auto count = next_slot_.load(std::memory_order_acquire);
   return std::ranges::any_of(
-      std::ranges::views::iota(std::size_t{0}, count),
-      [ptr](auto i) {
+      std::ranges::views::iota(std::size_t{0}, count), [ptr](auto i) {
         return slots_[i].load(std::memory_order_acquire) == ptr;
       });
 }
@@ -112,11 +112,10 @@ void HazardPointer<NumSlots>::Retire(T *ptr) {
 template <std::size_t NumSlots>
 inline void HazardPointer<NumSlots>::Scan() {
   const auto count = next_slot_.load(std::memory_order_acquire);
-  const auto loads =
-      std::ranges::views::iota(std::size_t{0}, count) |
-      std::views::transform([](auto i) {
-        return slots_[i].load(std::memory_order_acquire);
-      });
+  const auto loads = std::ranges::views::iota(std::size_t{0}, count) |
+                     std::views::transform([](auto i) {
+                       return slots_[i].load(std::memory_order_acquire);
+                     });
   const std::unordered_set<void *> protected_ptrs(loads.begin(), loads.end());
 
   std::erase_if(retired_, [&protected_ptrs](const RetiredNode &node) {
@@ -128,6 +127,6 @@ inline void HazardPointer<NumSlots>::Scan() {
   });
 }
 
-} // namespace jglockfree
+}  // namespace jglockfree
 
-#endif // JGLOCKFREE_HAZARD_POINTER_H_
+#endif  // JGLOCKFREE_HAZARD_POINTER_H_

@@ -41,13 +41,14 @@ TEST(QueueTest, ConcurrentEnqueueDequeue) {
   producers.reserve(kNumProducers);
   consumers.reserve(kNumConsumers);
 
-  std::ranges::for_each(std::ranges::views::iota(0, kNumProducers), [&](const int p) {
-    producers.emplace_back([&] {
-      std::ranges::for_each(
-          std::ranges::views::iota(0, kItemsPerProducer),
-          [&](const int i) { queue.Enqueue(p * kItemsPerProducer + i); });
-    });
-  });
+  std::ranges::for_each(
+      std::ranges::views::iota(0, kNumProducers), [&](const int p) {
+        producers.emplace_back([&] {
+          std::ranges::for_each(
+              std::ranges::views::iota(0, kItemsPerProducer),
+              [&](const int i) { queue.Enqueue(p * kItemsPerProducer + i); });
+        });
+      });
 
   std::ranges::for_each(producers, [](auto &t) { t.join(); });
 

@@ -7,7 +7,7 @@
 
 template <typename T>
 class MutexQueue {
-public:
+ public:
   void Enqueue(T value) {
     std::lock_guard lock(mutex_);
     queue_.push(std::move(value));
@@ -22,9 +22,10 @@ public:
     queue_.pop();
     return value;
   }
-private:
+
+ private:
   std::queue<T> queue_;
   std::mutex mutex_;
 };
 
-#endif //JGLOCKFREE_MUTEX_QUEUE_H
+#endif  // JGLOCKFREE_MUTEX_QUEUE_H

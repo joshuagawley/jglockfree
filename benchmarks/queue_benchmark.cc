@@ -1,12 +1,13 @@
+#include <benchmark/benchmark.h>
+#include <jglockfree/queue.h>
+
 #include <latch>
 #include <ranges>
 
 #include "mutex_queue.h"
-#include <jglockfree/queue.h>
-#include <benchmark/benchmark.h>
 
 class QueueFixture : public benchmark::Fixture {
-public:
+ public:
   jglockfree::Queue<int> lock_free_queue;
   MutexQueue<int> mutex_queue;
 
@@ -42,7 +43,6 @@ BENCHMARK_DEFINE_F(QueueFixture, LockFreeMixed)(benchmark::State &state) {
   }
 }
 
-
 BENCHMARK_DEFINE_F(QueueFixture, MutexMixed)(benchmark::State &state) {
   for (auto _ : state) {
     if (state.thread_index() % 2 == 0) {
@@ -53,7 +53,23 @@ BENCHMARK_DEFINE_F(QueueFixture, MutexMixed)(benchmark::State &state) {
   }
 }
 
-BENCHMARK_REGISTER_F(QueueFixture, LockFreeEnqueue)->Threads(1)->Threads(2)->Threads(4)->Threads(8);
-BENCHMARK_REGISTER_F(QueueFixture, MutexEnqueue)->Threads(1)->Threads(2)->Threads(4)->Threads(8);
-BENCHMARK_REGISTER_F(QueueFixture, LockFreeMixed)->Threads(1)->Threads(2)->Threads(4)->Threads(8);
-BENCHMARK_REGISTER_F(QueueFixture, MutexMixed)->Threads(1)->Threads(2)->Threads(4)->Threads(8);
+BENCHMARK_REGISTER_F(QueueFixture, LockFreeEnqueue)
+    ->Threads(1)
+    ->Threads(2)
+    ->Threads(4)
+    ->Threads(8);
+BENCHMARK_REGISTER_F(QueueFixture, MutexEnqueue)
+    ->Threads(1)
+    ->Threads(2)
+    ->Threads(4)
+    ->Threads(8);
+BENCHMARK_REGISTER_F(QueueFixture, LockFreeMixed)
+    ->Threads(1)
+    ->Threads(2)
+    ->Threads(4)
+    ->Threads(8);
+BENCHMARK_REGISTER_F(QueueFixture, MutexMixed)
+    ->Threads(1)
+    ->Threads(2)
+    ->Threads(4)
+    ->Threads(8);

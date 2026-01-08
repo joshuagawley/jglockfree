@@ -2,7 +2,6 @@
 
 #include <gtest/gtest.h>
 #include <jglockfree/hazard_pointer.h>
-
 #include <jglockfree/queue.h>
 
 #include <atomic>
@@ -11,7 +10,7 @@
 
 TEST(HazardPointerTest, ProtectReturnsCurrentValue) {
   int node{42};
-  std::atomic<int*> source{&node};
+  std::atomic<int *> source{&node};
 
   jglockfree::HazardPointer hazard_pointer;
   int *protected_ptr = hazard_pointer.Protect(source);
@@ -23,7 +22,7 @@ TEST(HazardPointerTest, ProtectReturnsCurrentValue) {
 TEST(HazardPointerTest, ProtectDetectsChangeAndRetries) {
   int node_a{1};
   int node_b{2};
-  std::atomic<int*> source{&node_a};
+  std::atomic<int *> source{&node_a};
 
   // We can't directly test the retry loop without instrumentation,
   // but we can verify it converges to the final value after a change
@@ -33,7 +32,7 @@ TEST(HazardPointerTest, ProtectDetectsChangeAndRetries) {
   });
 
   jglockfree::HazardPointer hp;
-  const int* result = hp.Protect(source);
+  const int *result = hp.Protect(source);
   changer.join();
 
   // Result should be either &node_a (if protect completed before change)
@@ -44,7 +43,7 @@ TEST(HazardPointerTest, ProtectDetectsChangeAndRetries) {
 
 TEST(HazardPointerTest, IsProtectedReturnsTrueForProtectedPointer) {
   int node = 42;
-  std::atomic<int*> source{&node};
+  std::atomic<int *> source{&node};
 
   jglockfree::HazardPointer hp;
   hp.Protect(source);
@@ -55,7 +54,7 @@ TEST(HazardPointerTest, IsProtectedReturnsTrueForProtectedPointer) {
 
 TEST(HazardPointerTest, IsProtectedReturnsFalseAfterClear) {
   int node{42};
-  std::atomic<int*> source{&node};
+  std::atomic<int *> source{&node};
 
   jglockfree::HazardPointer hp;
   hp.Protect(source);
@@ -67,7 +66,7 @@ TEST(HazardPointerTest, IsProtectedReturnsFalseAfterClear) {
 TEST(HazardPointerTest, IsProtectedReturnsFalseForUnprotectedPointer) {
   int node_a{1};
   int node_b{2};
-  std::atomic<int*> source{&node_a};
+  std::atomic<int *> source{&node_a};
 
   jglockfree::HazardPointer hp;
   hp.Protect(source);
@@ -78,7 +77,7 @@ TEST(HazardPointerTest, IsProtectedReturnsFalseForUnprotectedPointer) {
 
 TEST(HazardPointerTest, ClearIsIdempotent) {
   int node{42};
-  std::atomic<int*> source{&node};
+  std::atomic<int *> source{&node};
 
   jglockfree::HazardPointer hp;
   hp.Protect(source);
@@ -95,7 +94,7 @@ TEST(HazardPointerTest, StressTestProtectClearCycle) {
   constexpr int kNumNodes{4};
 
   std::array<int, kNumNodes> nodes{};
-  std::atomic<int*> source{&nodes[0]};
+  std::atomic<int *> source{&nodes[0]};
   std::atomic<bool> stop{false};
 
   // Thread that constantly changes the source
@@ -110,7 +109,7 @@ TEST(HazardPointerTest, StressTestProtectClearCycle) {
   // Main thread repeatedly protects and clears
   jglockfree::HazardPointer hp;
   for (auto i : std::views::iota(0, kNumIterations)) {
-    int* ptr = hp.Protect(source);
+    int *ptr = hp.Protect(source);
     // Verify we got a valid pointer from our array
     ASSERT_GE(ptr, &nodes[0]);
     ASSERT_LE(ptr, &nodes[kNumNodes - 1]);
@@ -132,14 +131,15 @@ TEST(HazardPointerTest, StressRetirement) {
 
   std::ranges::for_each(std::views::iota(0, kThreads), [&](const auto t) {
     threads.emplace_back([&] {
-      std::ranges::for_each(std::views::iota(0, kOpsPerThread), [&](const auto i) {
-        queue.Enqueue(t * kOpsPerThread + i);
-        queue.Dequeue();
-      });
+      std::ranges::for_each(std::views::iota(0, kOpsPerThread),
+                            [&](const auto i) {
+                              queue.Enqueue(t * kOpsPerThread + i);
+                              queue.Dequeue();
+                            });
     });
   });
-  
-  std::ranges::for_each(threads, [](auto& t) { t.join(); });
+
+  std::ranges::for_each(threads, [](auto &t) { t.join(); });
 }
 
 TEST(HazardPointerTest, DelayedReader) {
@@ -167,4 +167,3 @@ TEST(HazardPointerTest, DelayedReader) {
   t1.join();
   t2.join();
 }
-
