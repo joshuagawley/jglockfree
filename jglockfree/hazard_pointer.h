@@ -9,9 +9,12 @@
 
 namespace jglockfree {
 
-inline constexpr std::size_t kMaxHazardPointers = 128;
+inline constexpr std::size_t kMaxHazardPointers{128};
 inline constinit std::array<std::atomic<void *>, kMaxHazardPointers> kSlots{};
 inline constinit std::atomic<std::size_t> kNextSlot{0};
+
+inline std::mutex kFreeListGuard{};
+inline constinit std::vector<std::size_t> kFreeList{};
 
 struct RetiredNode {
   void *ptr;
@@ -21,6 +24,7 @@ struct RetiredNode {
 class HazardPointer {
 public:
   HazardPointer();
+  ~HazardPointer();
 
   template <typename T>
   constexpr T *Protect(std::atomic<T *> &source);
@@ -37,17 +41,32 @@ private:
   static void Scan();
 
   std::atomic<void *> *slot_{nullptr};
+  std::size_t slot_index_{};
 
   static constexpr std::size_t kRetireThreshold = 2 * kMaxHazardPointers;
   thread_local static inline std::vector<RetiredNode> retired_;
 };
 
 inline HazardPointer::HazardPointer() {
-  const auto index = kNextSlot.fetch_add(1, std::memory_order_relaxed);
-  if (index >= kMaxHazardPointers) {
-    throw std::runtime_error("Hazard pointer slots exhausted");
+  {
+    std::lock_guard lock{kFreeListGuard};
+    if (not kFreeList.empty()) {
+      slot_index_ = kFreeList.back();
+      kFreeList.pop_back();
+    } else {
+      const auto index = kNextSlot.fetch_add(1, std::memory_order_relaxed);
+      if (index >= kMaxHazardPointers) {
+        throw std::runtime_error("Hazard pointer slots exhausted");
+      }
+    }
   }
-  slot_ = &kSlots[index];
+  slot_ = &kSlots[slot_index_];
+}
+
+inline HazardPointer::~HazardPointer() {
+  Clear();
+  std::lock_guard lock{kFreeListGuard};
+  kFreeList.push_back(slot_index_);
 }
 
 template <typename T>
