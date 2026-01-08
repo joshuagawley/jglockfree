@@ -35,6 +35,7 @@ jobs:
         run: ctest --test-dir build --output-on-failure
         env:
           ASAN_OPTIONS: ${{ matrix.sanitizer == 'asan' && 'detect_leaks=0' || '' }}
+          TSAN_OPTIONS: ${{ matrix.sanitizer == 'tsan' && 'suppressions=tsan_suppressions.txt' || '' }}
 
   format:
     runs-on: ubuntu-24.04
