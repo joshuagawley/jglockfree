@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: MIT
+
 #include <gtest/gtest.h>
 #include <jglockfree/hazard_pointer.h>
 
@@ -23,7 +24,6 @@ TEST(HazardPointerTest, ProtectDetectsChangeAndRetries) {
   int node_a{1};
   int node_b{2};
   std::atomic<int*> source{&node_a};
-  std::atomic<int> protect_call_count{0};
 
   // We can't directly test the retry loop without instrumentation,
   // but we can verify it converges to the final value after a change
@@ -101,7 +101,7 @@ TEST(HazardPointerTest, StressTestProtectClearCycle) {
   // Thread that constantly changes the source
   std::thread mutator([&] {
     int idx = 0;
-    while (!stop.load(std::memory_order_relaxed)) {
+    while (not stop.load(std::memory_order_relaxed)) {
       idx = (idx + 1) % kNumNodes;
       source.store(&nodes[idx], std::memory_order_release);
     }
@@ -126,7 +126,6 @@ TEST(HazardPointerTest, StressRetirement) {
   constexpr int kOpsPerThread{100'000};
 
   jglockfree::Queue<int> queue;
-  std::atomic<bool> stop{false};
 
   std::vector<std::thread> threads;
   threads.reserve(kThreads);
@@ -148,7 +147,7 @@ TEST(HazardPointerTest, DelayedReader) {
 
   jglockfree::Queue<int> queue;
   std::atomic<int> iter{0};
-  std::atomic<bool> stop{false};
+  constexpr std::atomic<bool> stop{false};
 
   auto worker = [&] {
     while (not stop.load(std::memory_order_relaxed)) {

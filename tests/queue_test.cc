@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: MIT
+
 #include <gtest/gtest.h>
 #include <jglockfree/queue.h>
 
@@ -50,7 +51,7 @@ TEST(QueueTest, ConcurrentEnqueueDequeue) {
 
   std::ranges::for_each(producers, [](auto &t) { t.join(); });
 
-  std::ranges::for_each(std::ranges::views::iota(0, kNumConsumers), [&](int p) {
+  std::ranges::for_each(std::ranges::views::iota(0, kNumConsumers), [&](int _) {
     consumers.emplace_back([&queue, &total_dequeued] {
       while (auto _ = queue.Dequeue()) {
         total_dequeued.fetch_add(1, std::memory_order_relaxed);

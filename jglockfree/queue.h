@@ -1,10 +1,9 @@
-// SPDX-License-Identifier
+// SPDX-License-Identifier: MIT
 
 #ifndef JGLOCKFREE_INCLUDE_QUEUE_H_
 #define JGLOCKFREE_INCLUDE_QUEUE_H_
 
 #include "hazard_pointer.h"
-
 
 #include <atomic>
 #include <cstdint>
@@ -32,7 +31,7 @@ public:
   void Enqueue(const T value) {
     auto node = new Node(std::move(value));
 
-    for (;;) {
+    while (true) {
       auto old_tail = tail_.load(std::memory_order_relaxed);
       Node *old_tail_ptr  = GetPtr(old_tail);
       auto next = old_tail_ptr->next.load(std::memory_order_acquire);
@@ -69,7 +68,7 @@ public:
   std::optional<T> Dequeue() {
     thread_local HazardPointer hp_head;
     thread_local HazardPointer hp_next;
-    for (;;) {
+    while (true) {
       auto old_head = head_.load(std::memory_order_relaxed);
       auto old_tail = tail_.load(std::memory_order_relaxed);
       auto *old_head_ptr = hp_head.Protect<Node>(head_, GetPtr);

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 #ifndef JGLOCKFREE_HAZARD_POINTER_H_
 #define JGLOCKFREE_HAZARD_POINTER_H_
 
@@ -30,10 +32,10 @@ public:
 
   template <typename T>
   constexpr T *Protect(std::atomic<T *> &source) {
-    for (;;) {
-      auto ptr = source.load(std::memory_order_acquire);
+    while (true) {
+      const auto ptr = source.load(std::memory_order_acquire);
       slot_->store(ptr, std::memory_order_seq_cst);
-      auto current = source.load(std::memory_order_seq_cst);
+      const auto current = source.load(std::memory_order_seq_cst);
       if (ptr == current) {
         return ptr;
       }
@@ -42,11 +44,11 @@ public:
 
   template <typename T, typename Extractor>
   T* Protect(std::atomic<uint64_t>& source, Extractor extract) {
-     for (;;) {
-       auto tagged = source.load(std::memory_order_acquire);
-       auto ptr = extract(tagged);
+     while (true) {
+       const auto tagged = source.load(std::memory_order_acquire);
+       const auto ptr = extract(tagged);
        slot_->store(ptr, std::memory_order_seq_cst);
-       auto current = source.load(std::memory_order_seq_cst);
+       const auto current = source.load(std::memory_order_seq_cst);
        if (tagged == current) {
          return ptr;
        }
@@ -66,17 +68,17 @@ public:
   }
 
   template <typename T>
-  void Retire(T *ptr) {
+  static void Retire(T *ptr) {
      retired_.emplace_back(ptr, [](void *p) { delete static_cast<T *>(p); });
     if (retired_.size() >= kRetireThreshold) {
       Scan();
     }
   }
 private:
-  void Scan() {
-    auto count = kNextSlot.load(std::memory_order_acquire);
-    auto loads = std::ranges::views::iota(std::size_t{0}, count) | std::views::transform([](auto i) { return kSlots[i].load(std::memory_order_acquire); });
-    std::unordered_set<void *> protected_ptrs(loads.begin(), loads.end());
+  static void Scan() {
+    const auto count = kNextSlot.load(std::memory_order_acquire);
+    const auto loads = std::ranges::views::iota(std::size_t{0}, count) | std::views::transform([](auto i) { return kSlots[i].load(std::memory_order_acquire); });
+    const std::unordered_set<void *> protected_ptrs(loads.begin(), loads.end());
 
     std::erase_if(retired_, [&protected_ptrs](const RetiredNode &node) {
       if (protected_ptrs.contains(node.ptr)) {
