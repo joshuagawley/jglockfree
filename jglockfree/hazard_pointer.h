@@ -24,15 +24,15 @@ struct RetiredNode {
 class HazardPointer {
 public:
   HazardPointer();
-  ~HazardPointer();
+  ~HazardPointer() noexcept;
 
   template <typename T>
-  constexpr T *Protect(std::atomic<T *> &source);
+  constexpr T *Protect(std::atomic<T *> &source) noexcept;
 
   template <typename T>
-  static constexpr bool IsProtected(T *ptr);
+  static constexpr bool IsProtected(T *ptr) noexcept;
 
-  constexpr void Clear() const;
+  constexpr void Clear() const noexcept;
 
   template <typename T>
   static void Retire(T *ptr);
@@ -54,8 +54,8 @@ inline HazardPointer::HazardPointer() {
       slot_index_ = kFreeList.back();
       kFreeList.pop_back();
     } else {
-      const auto index = kNextSlot.fetch_add(1, std::memory_order_relaxed);
-      if (index >= kMaxHazardPointers) {
+      slot_index_ = kNextSlot.fetch_add(1, std::memory_order_relaxed);
+      if (slot_index_ >= kMaxHazardPointers) {
         throw std::runtime_error("Hazard pointer slots exhausted");
       }
     }
@@ -63,14 +63,14 @@ inline HazardPointer::HazardPointer() {
   slot_ = &kSlots[slot_index_];
 }
 
-inline HazardPointer::~HazardPointer() {
+inline HazardPointer::~HazardPointer() noexcept {
   Clear();
   std::lock_guard lock{kFreeListGuard};
   kFreeList.push_back(slot_index_);
 }
 
 template <typename T>
-constexpr T *HazardPointer::Protect(std::atomic<T *> &source) {
+constexpr T *HazardPointer::Protect(std::atomic<T *> &source) noexcept {
   while (true) {
     const auto ptr = source.load(std::memory_order_acquire);
     slot_->store(ptr, std::memory_order_seq_cst);
@@ -81,12 +81,12 @@ constexpr T *HazardPointer::Protect(std::atomic<T *> &source) {
   }
 }
 
-constexpr void HazardPointer::Clear() const {
+constexpr void HazardPointer::Clear() const noexcept {
   slot_->store(nullptr, std::memory_order_release);
 }
 
 template <typename T>
-constexpr bool HazardPointer::IsProtected(T *ptr) {
+constexpr bool HazardPointer::IsProtected(T *ptr) noexcept {
   const auto count = kNextSlot.load(std::memory_order_acquire);
   return std::ranges::any_of(
       std::ranges::views::iota(std::size_t{0}, count),

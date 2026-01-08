@@ -15,18 +15,24 @@ template <typename T>
 class Queue {
 public:
   Queue();
-  ~Queue();
+  ~Queue() noexcept;
+
+  Queue(const Queue&) = delete;
+  Queue& operator=(const Queue&) = delete;
+
+  Queue(Queue&&) = delete;
+  Queue& operator=(Queue&&) = delete;
 
   void Enqueue(T value);
-  std::optional<T> Dequeue();
+  std::optional<T> Dequeue() noexcept;
 
 private:
   struct Node {
     T value;
     std::atomic<Node *> next;
 
-    constexpr Node() : next(nullptr) {}
-    explicit constexpr Node(T value) : value(std::move(value)), next(nullptr) {}
+    constexpr Node() noexcept : next(nullptr) {}
+    explicit constexpr Node(T value) noexcept : value(std::move(value)), next(nullptr) {}
   };
 
   alignas(std::hardware_destructive_interference_size) std::atomic<Node *> head_;
@@ -41,7 +47,7 @@ Queue<T>::Queue() {
 }
 
 template <typename T>
-Queue<T>::~Queue() {
+Queue<T>::~Queue() noexcept {
   auto current = head_.load(std::memory_order_relaxed);
   while (current != nullptr) {
     auto next = current->next.load(std::memory_order_relaxed);
@@ -89,7 +95,7 @@ void Queue<T>::Enqueue(T value) {
 }
 
 template <typename T>
-std::optional<T> Queue<T>::Dequeue() {
+std::optional<T> Queue<T>::Dequeue() noexcept {
   thread_local HazardPointer hp_head;
   thread_local HazardPointer hp_next;
 
