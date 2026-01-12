@@ -119,7 +119,7 @@ constexpr void HazardPointer<NumSlots>::Scan() {
   const auto loads = std::views::iota(std::size_t{0}, count) |
                      std::views::transform([](auto i) {
                        return slots_[i].load(std::memory_order_acquire);
-                    });
+                     });
   const std::unordered_set<void *> protected_ptrs(loads.begin(), loads.end());
 
   std::erase_if(retired_, [&protected_ptrs](const RetiredNode &node) {

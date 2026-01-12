@@ -168,3 +168,102 @@ TEST(HazardPointerTest, DelayedReader) {
   t1.join();
   t2.join();
 }
+
+TEST(HazardPointerTest, SlotExhaustionThrows) {
+  // Use a small slot count to make exhaustion testable
+  using SmallHP = jglockfree::HazardPointer<4>;
+
+  std::vector<std::unique_ptr<SmallHP>> hps;
+
+  // Allocate all 4 slots
+  for (int i = 0; i < 4; ++i) {
+    EXPECT_NO_THROW(hps.push_back(std::make_unique<SmallHP>()))
+        << "Failed to allocate slot " << i;
+  }
+
+  // 5th allocation should throw
+  EXPECT_THROW(
+      { SmallHP overflow; }, std::runtime_error)
+      << "Expected exception when slots exhausted";
+}
+
+TEST(HazardPointerTest, SlotReuseAfterDestruction) {
+  using SmallHP = jglockfree::HazardPointer<4>;
+
+  // Allocate all 4 slots
+  {
+    std::vector<std::unique_ptr<SmallHP>> hps;
+    for (int i = 0; i < 4; ++i) {
+      hps.push_back(std::make_unique<SmallHP>());
+    }
+    // All slots freed when vector goes out of scope
+  }
+
+  // Should be able to allocate 4 more
+  std::vector<std::unique_ptr<SmallHP>> hps2;
+  for (int i = 0; i < 4; ++i) {
+    EXPECT_NO_THROW(hps2.push_back(std::make_unique<SmallHP>()))
+        << "Failed to reuse slot " << i;
+  }
+}
+
+TEST(HazardPointerTest, PartialSlotReuse) {
+  using SmallHP = jglockfree::HazardPointer<4>;
+
+  auto hp1 = std::make_unique<SmallHP>();
+  auto hp2 = std::make_unique<SmallHP>();
+  auto hp3 = std::make_unique<SmallHP>();
+  auto hp4 = std::make_unique<SmallHP>();
+
+  // Destroy hp2, freeing one slot
+  hp2.reset();
+
+  // Should be able to allocate one more
+  std::unique_ptr<SmallHP> hp5;
+  EXPECT_NO_THROW(hp5 = std::make_unique<SmallHP>());
+
+  // But not two more (only one slot was freed)
+  EXPECT_THROW({ SmallHP overflow; }, std::runtime_error);
+}
+
+TEST(HazardPointerTest, SlotExhaustionMultithreaded) {
+  using SmallHP = jglockfree::HazardPointer<8>;
+
+  std::atomic<int> successful_allocations{0};
+  std::atomic<int> failed_allocations{0};
+  std::atomic<bool> start{false};
+
+  constexpr int kThreads = 16;  // More threads than slots
+
+  std::vector<std::thread> threads;
+  threads.reserve(kThreads);
+
+  for (int i = 0; i < kThreads; ++i) {
+    threads.emplace_back([&] {
+      while (!start.load(std::memory_order_acquire)) {
+        std::this_thread::yield();
+      }
+
+      try {
+        SmallHP hp;
+        successful_allocations.fetch_add(1, std::memory_order_relaxed);
+        // Hold the slot briefly
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+      } catch (const std::runtime_error &) {
+        failed_allocations.fetch_add(1, std::memory_order_relaxed);
+      }
+    });
+  }
+
+  start.store(true, std::memory_order_release);
+
+  for (auto &t : threads) {
+    t.join();
+  }
+
+  // At most 8 should succeed (the slot count)
+  EXPECT_LE(successful_allocations.load(), 8);
+  // Total should equal thread count
+  EXPECT_EQ(successful_allocations.load() + failed_allocations.load(),
+            kThreads);
+}

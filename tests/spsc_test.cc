@@ -7,6 +7,39 @@
 #include <thread>
 #include <vector>
 
+struct ThrowsOnMove {
+  int value;
+  static inline int move_count = 0;
+  static inline int throw_after = std::numeric_limits<int>::max();
+
+  constexpr ThrowsOnMove() : value(-1) {}
+  constexpr explicit ThrowsOnMove(int v) : value(v) {}
+
+  ThrowsOnMove(const ThrowsOnMove &other) : value(other.value) {}
+  ThrowsOnMove &operator=(const ThrowsOnMove &) = default;
+
+  ThrowsOnMove(ThrowsOnMove &&other) : value(other.value) {
+    if (++move_count >= throw_after) {
+      throw std::runtime_error("move failed");
+    }
+  }
+
+  ThrowsOnMove &operator=(ThrowsOnMove &&other) {
+    if (++move_count >= throw_after) {
+      throw std::runtime_error("Move assignment failed");
+    }
+    value = other.value;
+    return *this;
+  }
+
+  static void Reset(int throw_at);
+};
+
+void ThrowsOnMove::Reset(int throw_at = std::numeric_limits<int>::max()) {
+  move_count = 0;
+  throw_after = throw_at;
+}
+
 // Helper: spin-enqueue until successful
 template <typename T, std::size_t N>
 void SpinEnqueue(jglockfree::SpscQueue<T, N> &queue, T value) {
@@ -627,4 +660,198 @@ TEST(SpscQueueBlockingTest, BlockingWithMoveOnlyTypes) {
 
   producer.join();
   consumer.join();
+}
+
+// ============================================================================
+// Exception Safety Tests
+// ============================================================================
+
+TEST(SpscQueueExceptionTest, EnqueueExceptionLeavesQueueUsable) {
+  jglockfree::SpscQueue<ThrowsOnMove, 4> queue;
+
+  // Successfully enqueue one item
+  ThrowsOnMove::Reset();
+  ASSERT_TRUE(queue.TryEnqueue(ThrowsOnMove{1}));
+
+  // Set up to throw on next move
+  ThrowsOnMove::Reset(1);
+  EXPECT_THROW(queue.TryEnqueue(ThrowsOnMove{2}), std::runtime_error);
+
+  // Queue should still be usable
+  ThrowsOnMove::Reset();
+  ASSERT_TRUE(queue.TryEnqueue(ThrowsOnMove{3}));
+
+  // Verify we can dequeue both items
+  auto first = queue.TryDequeue();
+  ASSERT_TRUE(first.has_value());
+  EXPECT_EQ(first->value, 1);
+
+  auto second = queue.TryDequeue();
+  ASSERT_TRUE(second.has_value());
+  EXPECT_EQ(second->value, 3);
+
+  EXPECT_FALSE(queue.TryDequeue().has_value());
+}
+
+TEST(SpscQueueExceptionTest, DequeueExceptionLeavesQueueUsable) {
+  jglockfree::SpscQueue<ThrowsOnMove, 4> queue;
+
+  // Enqueue some items
+  ThrowsOnMove::Reset();
+  ASSERT_TRUE(queue.TryEnqueue(ThrowsOnMove{1}));
+  ASSERT_TRUE(queue.TryEnqueue(ThrowsOnMove{2}));
+
+  // Set up to throw on dequeue's move
+  ThrowsOnMove::Reset(1);
+  EXPECT_THROW(queue.TryDequeue(), std::runtime_error);
+
+  // Queue should still be usable
+  // Note: The item that threw is NOT consumed—head didn't advance.
+  // This means we can retry and get the same item.
+  ThrowsOnMove::Reset();
+
+  // First item is still there (the one that threw)
+  auto first = queue.TryDequeue();
+  ASSERT_TRUE(first.has_value());
+  EXPECT_EQ(first->value, 1);
+
+  // Second item
+  auto second = queue.TryDequeue();
+  ASSERT_TRUE(second.has_value());
+  EXPECT_EQ(second->value, 2);
+
+  EXPECT_FALSE(queue.TryDequeue().has_value());
+}
+
+// ============================================================================
+// Non-Power-of-Two Size Tests
+// ============================================================================
+
+TEST(SpscQueueTest, NonPowerOfTwoSize_Three) {
+  jglockfree::SpscQueue<int, 3> queue;  // capacity of 3
+
+  EXPECT_TRUE(queue.TryEnqueue(1));
+  EXPECT_TRUE(queue.TryEnqueue(2));
+  EXPECT_TRUE(queue.TryEnqueue(3));
+  EXPECT_FALSE(queue.TryEnqueue(4));  // full
+
+  EXPECT_EQ(queue.TryDequeue(), 1);
+  EXPECT_EQ(queue.TryDequeue(), 2);
+  EXPECT_EQ(queue.TryDequeue(), 3);
+  EXPECT_EQ(queue.TryDequeue(), std::nullopt);
+}
+
+TEST(SpscQueueTest, NonPowerOfTwoSize_Seven) {
+  jglockfree::SpscQueue<int, 7> queue;  // capacity of 7
+
+  // Fill completely
+  for (int i = 0; i < 7; ++i) {
+    EXPECT_TRUE(queue.TryEnqueue(std::move(i))) << "Failed at i=" << i;
+  }
+  EXPECT_FALSE(queue.TryEnqueue(99));  // full
+
+  // Drain completely
+  for (int i = 0; i < 7; ++i) {
+    auto result = queue.TryDequeue();
+    ASSERT_TRUE(result.has_value()) << "Failed at i=" << i;
+    EXPECT_EQ(*result, i);
+  }
+  EXPECT_EQ(queue.TryDequeue(), std::nullopt);
+}
+
+TEST(SpscQueueTest, NonPowerOfTwoSize_WrapAround) {
+  // Test that modulo arithmetic works correctly at boundaries
+  jglockfree::SpscQueue<int, 5> queue;  // array size 6, capacity 5
+
+  // Do many cycles to exercise wraparound
+  for (int cycle = 0; cycle < 20; ++cycle) {
+    // Partially fill
+    for (int i = 0; i < 3; ++i) {
+      EXPECT_TRUE(queue.TryEnqueue(cycle * 100 + i));
+    }
+
+    // Partially drain
+    for (int i = 0; i < 3; ++i) {
+      auto result = queue.TryDequeue();
+      ASSERT_TRUE(result.has_value());
+      EXPECT_EQ(*result, cycle * 100 + i);
+    }
+  }
+}
+
+TEST(SpscQueueTest, NonPowerOfTwoSize_ConcurrentWrapAround) {
+  constexpr std::size_t kNumItems = 100000;
+  jglockfree::SpscQueue<std::size_t, 7> queue;  // odd size, small buffer
+
+  std::thread producer([&] {
+    for (std::size_t i = 0; i < kNumItems; ++i) {
+      while (!queue.TryEnqueue(std::move(i))) {
+        std::this_thread::yield();
+      }
+    }
+  });
+
+  std::thread consumer([&] {
+    for (std::size_t expected = 0; expected < kNumItems; ++expected) {
+      while (true) {
+        auto result = queue.TryDequeue();
+        if (result.has_value()) {
+          EXPECT_EQ(*result, expected);
+          break;
+        }
+        std::this_thread::yield();
+      }
+    }
+  });
+
+  producer.join();
+  consumer.join();
+}
+
+TEST(SpscQueueTest, DestructorWithRemainingItems) {
+  auto witness = std::make_shared<int>(42);
+
+  {
+    jglockfree::SpscQueue<std::shared_ptr<int>, 8> queue;
+    ASSERT_TRUE(queue.TryEnqueue(witness));
+    ASSERT_TRUE(queue.TryEnqueue(witness));
+    ASSERT_TRUE(queue.TryEnqueue(witness));
+
+    EXPECT_EQ(witness.use_count(), 4);
+  }
+
+  // Note: SPSC queue with trivial destructor may not clean up items in slots!
+  // This test documents current behaviour - if it fails, you've added cleanup
+  // If use_count is still 4 here, the queue isn't destroying remaining items
+  // If use_count is 1, the queue properly destroys them
+
+  // TODO: Document expected behaviour - should SPSC clean up remaining items?
+  // For now, just ensure no crash
+}
+
+TEST(SpscQueueTest, DestructorWhenEmpty) {
+  {
+    jglockfree::SpscQueue<int, 8> queue;
+    // No enqueue, just destroy
+  }
+  // Should not crash
+}
+
+TEST(SpscQueueTest, DestructorAfterDrain) {
+  auto witness = std::make_shared<int>(42);
+
+  {
+    jglockfree::SpscQueue<std::shared_ptr<int>, 8> queue;
+    ASSERT_TRUE(queue.TryEnqueue(witness));
+    ASSERT_TRUE(queue.TryEnqueue(witness));
+
+    EXPECT_EQ(witness.use_count(), 3);
+
+    queue.TryDequeue();
+    queue.TryDequeue();
+
+    EXPECT_EQ(witness.use_count(), 1);
+  }
+
+  EXPECT_EQ(witness.use_count(), 1);
 }
