@@ -22,7 +22,8 @@ class HazardPointer {
   constexpr ~HazardPointer() noexcept;
 
   template <typename T>
-  [[nodiscard]] constexpr auto Protect(std::atomic<T *> &source) noexcept -> T *;
+  [[nodiscard]] constexpr auto Protect(std::atomic<T *> &source) noexcept
+      -> T *;
 
   template <typename T>
   [[nodiscard]] static constexpr auto IsProtected(T *ptr) noexcept -> bool;

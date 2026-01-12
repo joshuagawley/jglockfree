@@ -4,28 +4,26 @@
 #define JGLOCKFREE_SPSC_H
 
 #include <__new/interference_size.h>
-
+#include <__ranges/iota_view.h>
 
 #include <array>
 #include <atomic>
-#include <optional>
 #include <mutex>
-#include <__ranges/iota_view.h>
-
+#include <optional>
 
 namespace jglockfree {
 
 template <typename T, std::size_t NumSlots>
 class SpscQueue {
-  public:
+ public:
   SpscQueue() : head_{0}, tail_{0} {}
   ~SpscQueue() noexcept = default;
 
-  constexpr SpscQueue(const SpscQueue&) = delete;
-  constexpr SpscQueue& operator=(const SpscQueue&) = delete;
+  constexpr SpscQueue(const SpscQueue &) = delete;
+  constexpr SpscQueue &operator=(const SpscQueue &) = delete;
 
-  SpscQueue(SpscQueue&&) = delete;
-  SpscQueue& operator=(SpscQueue&&) = delete;
+  SpscQueue(SpscQueue &&) = delete;
+  SpscQueue &operator=(SpscQueue &&) = delete;
 
   [[nodiscard]] constexpr auto TryEnqueue(T &&value) -> bool;
   [[nodiscard]] constexpr auto TryDequeue() -> std::optional<T>;
@@ -33,17 +31,23 @@ class SpscQueue {
   [[nodiscard]] constexpr auto Dequeue() -> T;
   [[nodiscard]] constexpr auto TryEnqueueUnsignalled(T &&value) -> bool;
   [[nodiscard]] constexpr auto TryDequeueUnsignalled() -> std::optional<T>;
-  private:
-    alignas(std::hardware_destructive_interference_size) std::array<T, NumSlots + 1> slots_;
-    alignas(std::hardware_destructive_interference_size) std::atomic<std::size_t> head_;
-    alignas(std::hardware_destructive_interference_size) std::atomic<std::size_t> tail_;
-    alignas(std::hardware_destructive_interference_size) std::condition_variable not_empty_;
-    alignas(std::hardware_destructive_interference_size) std::condition_variable not_full_;
-    alignas(std::hardware_destructive_interference_size) std::mutex mutex_;
+
+ private:
+  alignas(std::hardware_destructive_interference_size)
+      std::array<T, NumSlots + 1> slots_;
+  alignas(std::hardware_destructive_interference_size)
+      std::atomic<std::size_t> head_;
+  alignas(std::hardware_destructive_interference_size)
+      std::atomic<std::size_t> tail_;
+  alignas(std::hardware_destructive_interference_size) std::condition_variable
+      not_empty_;
+  alignas(std::hardware_destructive_interference_size)
+      std::condition_variable not_full_;
+  alignas(std::hardware_destructive_interference_size) std::mutex mutex_;
 };
 
 template <typename T, std::size_t NumSlots>
-constexpr bool SpscQueue<T, NumSlots>::TryEnqueueUnsignalled(T&& value) {
+constexpr bool SpscQueue<T, NumSlots>::TryEnqueueUnsignalled(T &&value) {
   const auto head = head_.load(std::memory_order_acquire);
   const auto tail = tail_.load(std::memory_order_relaxed);
   const auto new_tail = (tail + 1) % (NumSlots + 1);
@@ -59,7 +63,7 @@ constexpr bool SpscQueue<T, NumSlots>::TryEnqueueUnsignalled(T&& value) {
 }
 
 template <typename T, std::size_t NumSlots>
-constexpr bool SpscQueue<T, NumSlots>::TryEnqueue(T &&value){
+constexpr bool SpscQueue<T, NumSlots>::TryEnqueue(T &&value) {
   const bool success = TryEnqueueUnsignalled(std::move(value));
   if (success) {
     std::lock_guard<std::mutex> lock{mutex_};
@@ -69,7 +73,7 @@ constexpr bool SpscQueue<T, NumSlots>::TryEnqueue(T &&value){
 }
 
 template <typename T, std::size_t NumSlots>
-constexpr void SpscQueue<T, NumSlots>::Enqueue(T &&value){
+constexpr void SpscQueue<T, NumSlots>::Enqueue(T &&value) {
   // Fast path: spin for a bit
   for (const auto i : std::ranges::views::iota(0, 1000)) {
     if (TryEnqueueUnsignalled(std::move(value))) {
@@ -87,15 +91,13 @@ constexpr void SpscQueue<T, NumSlots>::Enqueue(T &&value){
 
   // Slow path: give up and block
   std::unique_lock<std::mutex> lock{mutex_};
-  not_full_.wait(lock, [this, &value] {
-    return TryEnqueueUnsignalled(std::move(value));
-  });
+  not_full_.wait(
+      lock, [this, &value] { return TryEnqueueUnsignalled(std::move(value)); });
   not_empty_.notify_one();
 }
 
 template <typename T, std::size_t NumSlots>
 constexpr std::optional<T> SpscQueue<T, NumSlots>::TryDequeueUnsignalled() {
-
   const auto head = head_.load(std::memory_order_relaxed);
   const auto tail = tail_.load(std::memory_order_acquire);
 
@@ -111,7 +113,7 @@ constexpr std::optional<T> SpscQueue<T, NumSlots>::TryDequeueUnsignalled() {
 }
 
 template <typename T, std::size_t NumSlots>
-constexpr std::optional<T> SpscQueue<T, NumSlots>::TryDequeue(){
+constexpr std::optional<T> SpscQueue<T, NumSlots>::TryDequeue() {
   auto result = TryDequeueUnsignalled();
   if (result.has_value()) {
     std::lock_guard<std::mutex> lock{mutex_};
@@ -142,13 +144,13 @@ constexpr T SpscQueue<T, NumSlots>::Dequeue() {
   std::optional<T> result;
   std::unique_lock<std::mutex> lock{mutex_};
   not_empty_.wait(lock, [this, &result] {
-      result = TryDequeueUnsignalled();
-      return result.has_value();
+    result = TryDequeueUnsignalled();
+    return result.has_value();
   });
   not_full_.notify_one();
   return std::move(*result);
 }
 
-}
+}  // namespace jglockfree
 
-#endif // JGLOCKFREE_SPSC_H
+#endif  // JGLOCKFREE_SPSC_H

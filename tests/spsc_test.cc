@@ -227,7 +227,8 @@ TEST(SpscQueueTest, ConsumerFasterThanProducer) {
 
   std::thread producer([&queue, kNumItems]() {
     std::ranges::for_each(
-        std::ranges::views::iota(std::size_t{0}, kNumItems), [&queue](std::size_t i) {
+        std::ranges::views::iota(std::size_t{0}, kNumItems),
+        [&queue](std::size_t i) {
           std::this_thread::sleep_for(std::chrono::microseconds(10));
           SpinEnqueue(queue, i);
         });
