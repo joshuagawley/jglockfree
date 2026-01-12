@@ -18,22 +18,22 @@ struct RetiredNode {
 template <std::size_t NumSlots = 128>
 class HazardPointer {
  public:
-  HazardPointer();
-  ~HazardPointer() noexcept;
+  constexpr HazardPointer();
+  constexpr ~HazardPointer() noexcept;
 
   template <typename T>
-  constexpr auto Protect(std::atomic<T *> &source) noexcept -> T *;
+  [[nodiscard]] constexpr auto Protect(std::atomic<T *> &source) noexcept -> T *;
 
   template <typename T>
-  static constexpr auto IsProtected(T *ptr) noexcept -> bool;
+  [[nodiscard]] static constexpr auto IsProtected(T *ptr) noexcept -> bool;
 
   constexpr auto Clear() const noexcept -> void;
 
   template <typename T>
-  static auto Retire(T *ptr) -> void;
+  constexpr static auto Retire(T *ptr) -> void;
 
  private:
-  static auto Scan() -> void;
+  constexpr static auto Scan() -> void;
 
   static inline std::array<std::atomic<void *>, NumSlots> slots_{};
   static inline std::atomic<std::size_t> next_slot_{0};
@@ -49,7 +49,7 @@ class HazardPointer {
 };
 
 template <std::size_t NumSlots>
-inline HazardPointer<NumSlots>::HazardPointer() {
+constexpr HazardPointer<NumSlots>::HazardPointer() {
   {
     std::lock_guard lock{free_list_guard_};
     if (not free_list_.empty()) {
@@ -66,7 +66,7 @@ inline HazardPointer<NumSlots>::HazardPointer() {
 }
 
 template <std::size_t NumSlots>
-inline HazardPointer<NumSlots>::~HazardPointer() noexcept {
+constexpr HazardPointer<NumSlots>::~HazardPointer() noexcept {
   Clear();
   std::lock_guard lock{free_list_guard_};
   free_list_.push_back(slot_index_);
@@ -103,7 +103,7 @@ constexpr bool HazardPointer<NumSlots>::IsProtected(T *ptr) noexcept {
 
 template <std::size_t NumSlots>
 template <typename T>
-void HazardPointer<NumSlots>::Retire(T *ptr) {
+constexpr void HazardPointer<NumSlots>::Retire(T *ptr) {
   retired_.emplace_back(ptr, [](void *p) { delete static_cast<T *>(p); });
   if (retired_.size() >= kRetireThreshold) {
     Scan();
@@ -111,7 +111,7 @@ void HazardPointer<NumSlots>::Retire(T *ptr) {
 }
 
 template <std::size_t NumSlots>
-inline void HazardPointer<NumSlots>::Scan() {
+constexpr void HazardPointer<NumSlots>::Scan() {
   const auto count = next_slot_.load(std::memory_order_acquire);
   const auto loads = std::ranges::views::iota(std::size_t{0}, count) |
                      std::views::transform([](auto i) {

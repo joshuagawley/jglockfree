@@ -8,8 +8,11 @@
 template <typename T>
 class MutexQueue {
  public:
-  auto Enqueue(T value) -> void;
-  auto Dequeue() -> std::optional<T>;
+  constexpr MutexQueue() = default;
+  constexpr ~MutexQueue() = default;
+
+  constexpr auto Enqueue(T value) -> void;
+  [[nodiscard]] constexpr auto Dequeue() -> std::optional<T>;
 
  private:
   std::queue<T> queue_;
@@ -17,13 +20,13 @@ class MutexQueue {
 };
 
 template <typename T>
-void MutexQueue<T>::Enqueue(T value) {
+constexpr void MutexQueue<T>::Enqueue(T value) {
   std::lock_guard lock(mutex_);
   queue_.push(std::move(value));
 }
 
 template <typename T>
-std::optional<T> MutexQueue<T>::Dequeue() {
+constexpr std::optional<T> MutexQueue<T>::Dequeue() {
   std::lock_guard lock(mutex_);
   if (queue_.empty()) {
     return std::nullopt;

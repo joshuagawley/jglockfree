@@ -21,18 +21,18 @@ class SpscQueue {
   SpscQueue() : head_{0}, tail_{0} {}
   ~SpscQueue() noexcept = default;
 
-  SpscQueue(const SpscQueue&) = delete;
-  SpscQueue& operator=(const SpscQueue&) = delete;
+  constexpr SpscQueue(const SpscQueue&) = delete;
+  constexpr SpscQueue& operator=(const SpscQueue&) = delete;
 
   SpscQueue(SpscQueue&&) = delete;
   SpscQueue& operator=(SpscQueue&&) = delete;
 
-  auto TryEnqueue(T &&value) -> bool;
-  auto TryDequeue() -> std::optional<T>;
-  auto Enqueue(T &&value) -> void;
-  auto Dequeue() -> T;
-  auto TryEnqueueUnsignalled(T &&value) -> bool;
-  auto TryDequeueUnsignalled() -> std::optional<T>;
+  [[nodiscard]] constexpr auto TryEnqueue(T &&value) -> bool;
+  [[nodiscard]] constexpr auto TryDequeue() -> std::optional<T>;
+  constexpr auto Enqueue(T &&value) -> void;
+  [[nodiscard]] constexpr auto Dequeue() -> T;
+  [[nodiscard]] constexpr auto TryEnqueueUnsignalled(T &&value) -> bool;
+  [[nodiscard]] constexpr auto TryDequeueUnsignalled() -> std::optional<T>;
   private:
     alignas(std::hardware_destructive_interference_size) std::array<T, NumSlots + 1> slots_;
     alignas(std::hardware_destructive_interference_size) std::atomic<std::size_t> head_;
@@ -43,7 +43,7 @@ class SpscQueue {
 };
 
 template <typename T, std::size_t NumSlots>
-bool SpscQueue<T, NumSlots>::TryEnqueueUnsignalled(T&& value) {
+constexpr bool SpscQueue<T, NumSlots>::TryEnqueueUnsignalled(T&& value) {
   const auto head = head_.load(std::memory_order_acquire);
   const auto tail = tail_.load(std::memory_order_relaxed);
   const auto new_tail = (tail + 1) % (NumSlots + 1);
@@ -59,7 +59,7 @@ bool SpscQueue<T, NumSlots>::TryEnqueueUnsignalled(T&& value) {
 }
 
 template <typename T, std::size_t NumSlots>
-bool SpscQueue<T, NumSlots>::TryEnqueue(T &&value){
+constexpr bool SpscQueue<T, NumSlots>::TryEnqueue(T &&value){
   const bool success = TryEnqueueUnsignalled(std::move(value));
   if (success) {
     std::lock_guard<std::mutex> lock{mutex_};
@@ -69,7 +69,7 @@ bool SpscQueue<T, NumSlots>::TryEnqueue(T &&value){
 }
 
 template <typename T, std::size_t NumSlots>
-void SpscQueue<T, NumSlots>::Enqueue(T &&value){
+constexpr void SpscQueue<T, NumSlots>::Enqueue(T &&value){
   // Fast path: spin for a bit
   for (const auto i : std::ranges::views::iota(0, 1000)) {
     if (TryEnqueueUnsignalled(std::move(value))) {
@@ -94,7 +94,7 @@ void SpscQueue<T, NumSlots>::Enqueue(T &&value){
 }
 
 template <typename T, std::size_t NumSlots>
-std::optional<T> SpscQueue<T, NumSlots>::TryDequeueUnsignalled() {
+constexpr std::optional<T> SpscQueue<T, NumSlots>::TryDequeueUnsignalled() {
 
   const auto head = head_.load(std::memory_order_relaxed);
   const auto tail = tail_.load(std::memory_order_acquire);
@@ -111,7 +111,7 @@ std::optional<T> SpscQueue<T, NumSlots>::TryDequeueUnsignalled() {
 }
 
 template <typename T, std::size_t NumSlots>
-std::optional<T> SpscQueue<T, NumSlots>::TryDequeue(){
+constexpr std::optional<T> SpscQueue<T, NumSlots>::TryDequeue(){
   auto result = TryDequeueUnsignalled();
   if (result.has_value()) {
     std::lock_guard<std::mutex> lock{mutex_};
@@ -121,7 +121,7 @@ std::optional<T> SpscQueue<T, NumSlots>::TryDequeue(){
 }
 
 template <typename T, std::size_t NumSlots>
-T SpscQueue<T, NumSlots>::Dequeue() {
+constexpr T SpscQueue<T, NumSlots>::Dequeue() {
   // Fast path: spin for a bit
   for (const auto i : std::ranges::views::iota(0, 1000)) {
     auto result = TryDequeueUnsignalled();
