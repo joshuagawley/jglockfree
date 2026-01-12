@@ -3,7 +3,6 @@
 #ifndef JGLOCKFREE_HAZARD_POINTER_H_
 #define JGLOCKFREE_HAZARD_POINTER_H_
 
-#include <algorithm>
 #include <mutex>
 #include <ranges>
 #include <unordered_set>
@@ -18,8 +17,8 @@ struct RetiredNode {
 template <std::size_t NumSlots = 128>
 class HazardPointer {
  public:
-  constexpr HazardPointer();
-  constexpr ~HazardPointer() noexcept;
+  HazardPointer();
+  ~HazardPointer() noexcept;
 
   template <typename T>
   [[nodiscard]] constexpr auto Protect(std::atomic<T *> &source) noexcept
@@ -50,7 +49,7 @@ class HazardPointer {
 };
 
 template <std::size_t NumSlots>
-constexpr HazardPointer<NumSlots>::HazardPointer() {
+HazardPointer<NumSlots>::HazardPointer() {
   {
     std::lock_guard lock{free_list_guard_};
     if (not free_list_.empty()) {
@@ -67,7 +66,7 @@ constexpr HazardPointer<NumSlots>::HazardPointer() {
 }
 
 template <std::size_t NumSlots>
-constexpr HazardPointer<NumSlots>::~HazardPointer() noexcept {
+HazardPointer<NumSlots>::~HazardPointer() noexcept {
   Clear();
   std::lock_guard lock{free_list_guard_};
   free_list_.push_back(slot_index_);
@@ -96,10 +95,13 @@ template <std::size_t NumSlots>
 template <typename T>
 constexpr bool HazardPointer<NumSlots>::IsProtected(T *ptr) noexcept {
   const auto count = next_slot_.load(std::memory_order_acquire);
-  return std::ranges::any_of(
-      std::ranges::views::iota(std::size_t{0}, count), [ptr](auto i) {
-        return slots_[i].load(std::memory_order_acquire) == ptr;
-      });
+  for (auto i = std::size_t{0}; i < count; ++i) {
+    if (slots_[i].load(std::memory_order_acquire) == ptr) {
+      return true;
+    }
+  }
+
+  return false;
 }
 
 template <std::size_t NumSlots>
@@ -114,10 +116,10 @@ constexpr void HazardPointer<NumSlots>::Retire(T *ptr) {
 template <std::size_t NumSlots>
 constexpr void HazardPointer<NumSlots>::Scan() {
   const auto count = next_slot_.load(std::memory_order_acquire);
-  const auto loads = std::ranges::views::iota(std::size_t{0}, count) |
+  const auto loads = std::views::iota(std::size_t{0}, count) |
                      std::views::transform([](auto i) {
                        return slots_[i].load(std::memory_order_acquire);
-                     });
+                    });
   const std::unordered_set<void *> protected_ptrs(loads.begin(), loads.end());
 
   std::erase_if(retired_, [&protected_ptrs](const RetiredNode &node) {

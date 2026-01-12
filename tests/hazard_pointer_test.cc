@@ -108,7 +108,7 @@ TEST(HazardPointerTest, StressTestProtectClearCycle) {
 
   // Main thread repeatedly protects and clears
   jglockfree::HazardPointer hp;
-  for (auto i : std::views::iota(0, kNumIterations)) {
+  for (int i = 0; i < kNumIterations; ++i) {
     int *ptr = hp.Protect(source);
     // Verify we got a valid pointer from our array
     ASSERT_GE(ptr, &nodes[0]);
@@ -129,17 +129,18 @@ TEST(HazardPointerTest, StressRetirement) {
   std::vector<std::thread> threads;
   threads.reserve(kThreads);
 
-  std::ranges::for_each(std::views::iota(0, kThreads), [&](const auto t) {
-    threads.emplace_back([&] {
-      std::ranges::for_each(std::views::iota(0, kOpsPerThread),
-                            [&](const auto i) {
-                              queue.Enqueue(t * kOpsPerThread + i);
-                              queue.Dequeue();
-                            });
+  for (int t = 0; t < kThreads; ++t) {
+    threads.emplace_back([&queue, t] {
+      for (int i = 0; i < kOpsPerThread; ++i) {
+        queue.Enqueue(t * kOpsPerThread + i);
+        queue.Dequeue();
+      }
     });
-  });
+  }
 
-  std::ranges::for_each(threads, [](auto &t) { t.join(); });
+  for (auto &t : threads) {
+    t.join();
+  }
 }
 
 TEST(HazardPointerTest, DelayedReader) {

@@ -4,7 +4,6 @@
 #include <jglockfree/spsc.h>
 
 #include <chrono>
-#include <ranges>
 #include <thread>
 #include <vector>
 
@@ -81,20 +80,20 @@ TEST(SpscQueueTest, FillToCapacity) {
   // With NumSlots=8, array size is 9, capacity is 8
   jglockfree::SpscQueue<int, 8> queue;
 
-  std::ranges::for_each(std::ranges::views::iota(0, 8), [&queue](int i) {
+  for (int i = 0; i < 8; ++i) {
     EXPECT_TRUE(queue.TryEnqueue(std::move(i)))
         << "Failed to enqueue element " << i;
-  });
+  }
 
   // Queue should now be full
   EXPECT_FALSE(queue.TryEnqueue(999)) << "Queue should be full";
 
   // All 8 should come back out
-  std::ranges::for_each(std::ranges::views::iota(0, 8), [&queue](int i) {
+  for (int i = 0; i < 8; ++i) {
     const auto result = queue.TryDequeue();
     ASSERT_TRUE(result.has_value()) << "Failed to dequeue element " << i;
     EXPECT_EQ(*result, i);
-  });
+  }
 
   EXPECT_EQ(queue.TryDequeue(), std::nullopt);
 }
@@ -104,7 +103,7 @@ TEST(SpscQueueTest, WrapAroundBehavior) {
   jglockfree::SpscQueue<int, 4> queue;  // Capacity of 4, array size 5
 
   // Fill and drain a few times to move head/tail past the array end
-  std::ranges::for_each(std::ranges::views::iota(0, 5), [&queue](int round) {
+  for (int round = 0; round < 5; ++round) {
     EXPECT_TRUE(queue.TryEnqueue(round * 10 + 1));
     EXPECT_TRUE(queue.TryEnqueue(round * 10 + 2));
     EXPECT_TRUE(queue.TryEnqueue(round * 10 + 3));
@@ -112,20 +111,20 @@ TEST(SpscQueueTest, WrapAroundBehavior) {
     EXPECT_EQ(queue.TryDequeue(), round * 10 + 1);
     EXPECT_EQ(queue.TryDequeue(), round * 10 + 2);
     EXPECT_EQ(queue.TryDequeue(), round * 10 + 3);
-  });
+  }
 }
 
 TEST(SpscQueueTest, PartialFillDrainWrapAround) {
   jglockfree::SpscQueue<int, 4> queue;  // Capacity of 4
 
   // Enqueue one, dequeue one - keeps queue at 0-1 items while indices wrap
-  std::ranges::for_each(std::ranges::views::iota(0, 5), [&queue](int i) {
+  for (int i = 0; i < 5; ++i) {
     EXPECT_TRUE(queue.TryEnqueue(std::move(i)))
         << "Failed to enqueue at i=" << i;
     const auto result = queue.TryDequeue();
     ASSERT_TRUE(result.has_value()) << "Failed to dequeue at i=" << i;
     EXPECT_EQ(*result, i);
-  });
+  }
 }
 
 // ============================================================================
@@ -163,9 +162,10 @@ TEST(SpscQueueTest, SingleProducerSingleConsumer) {
   constexpr std::size_t kNumItems = 100000;
   jglockfree::SpscQueue<std::size_t, 1024> queue;
 
-  std::thread producer([&queue, kNumItems]() {
-    std::ranges::for_each(std::ranges::views::iota(std::size_t{0}, kNumItems),
-                          [&queue](std::size_t i) { SpinEnqueue(queue, i); });
+  std::thread producer([&queue]() {
+    for (std::size_t i = 0; i < kNumItems; ++i) {
+      SpinEnqueue(queue, i);
+    }
   });
 
   std::thread consumer([&queue]() {
@@ -193,12 +193,11 @@ TEST(SpscQueueTest, ProducerFasterThanConsumer) {
   jglockfree::SpscQueue<std::size_t, 64>
       queue;  // Small buffer forces backpressure
 
-  std::thread producer([&queue, kNumItems]() {
-    std::ranges::for_each(std::ranges::views::iota(std::size_t{0}, kNumItems),
-                          [&queue](std::size_t i) {
-                            SpinEnqueue(queue, i);
-                            // no delay, the producer goes as fast as possible
-                          });
+  std::thread producer([&queue]() {
+    for (std::size_t i = 0; i < kNumItems; ++i) {
+      SpinEnqueue(queue, i);
+      // no delay, the producer goes as fast as possible
+    }
   });
 
   std::thread consumer([&]() {
@@ -225,13 +224,11 @@ TEST(SpscQueueTest, ConsumerFasterThanProducer) {
   constexpr std::size_t kNumItems = 1000;
   jglockfree::SpscQueue<std::size_t, 64> queue;
 
-  std::thread producer([&queue, kNumItems]() {
-    std::ranges::for_each(
-        std::ranges::views::iota(std::size_t{0}, kNumItems),
-        [&queue](std::size_t i) {
-          std::this_thread::sleep_for(std::chrono::microseconds(10));
-          SpinEnqueue(queue, i);
-        });
+  std::thread producer([&queue]() {
+    for (std::size_t i = 0; i < kNumItems; ++i) {
+      std::this_thread::sleep_for(std::chrono::microseconds(10));
+      SpinEnqueue(queue, i);
+    }
   });
 
   std::thread consumer([&queue]() {
@@ -258,13 +255,11 @@ TEST(SpscQueueTest, StressTestLongRunning) {
   std::atomic<std::size_t> checksum_produced{0};
   std::atomic<std::size_t> checksum_consumed{0};
 
-  std::thread producer([&queue, kNumItems, &checksum_produced]() {
-    std::ranges::for_each(std::ranges::views::iota(std::size_t{0}, kNumItems),
-                          [&queue, &checksum_produced](std::size_t i) {
-                            SpinEnqueue(queue, i);
-                            checksum_produced.fetch_add(
-                                i, std::memory_order_relaxed);
-                          });
+  std::thread producer([&queue, &checksum_produced]() {
+    for (std::size_t i = 0; i < kNumItems; ++i) {
+      SpinEnqueue(queue, i);
+      checksum_produced.fetch_add(i, std::memory_order_relaxed);
+    }
   });
 
   std::thread consumer([&]() {
@@ -307,21 +302,19 @@ TEST(SpscQueueTest, RepeatedFillAndDrain) {
   // Completely fill, completely drain, repeat many times
   jglockfree::SpscQueue<int, 8> queue;
 
-  std::ranges::for_each(std::ranges::views::iota(0, 100), [&queue](int round) {
-    std::ranges::for_each(std::ranges::views::iota(0, 8),
-                          [&queue, round](int i) {
-                            EXPECT_TRUE(queue.TryEnqueue(round * 100 + i));
-                          });
+  for (int round = 0; round < 100; ++round) {
+    for (int i = 0; i < 8; ++i) {
+      EXPECT_TRUE(queue.TryEnqueue(round * 100 + i));
+    }
     EXPECT_FALSE(queue.TryEnqueue(-1)) << "Should be full at round " << round;
 
-    std::ranges::for_each(std::ranges::views::iota(0, 8),
-                          [&queue, round](int i) {
-                            auto result = queue.TryDequeue();
-                            ASSERT_TRUE(result.has_value());
-                            EXPECT_EQ(*result, round * 100 + i);
-                          });
+    for (int i = 0; i < 8; ++i) {
+      auto result = queue.TryDequeue();
+      ASSERT_TRUE(result.has_value());
+      EXPECT_EQ(*result, round * 100 + i);
+    }
     EXPECT_EQ(queue.TryDequeue(), std::nullopt);
-  });
+  }
 }
 
 TEST(SpscQueueTest, TryEnqueueReturnsFalseWhenFull) {
@@ -495,17 +488,16 @@ TEST(SpscQueueBlockingTest, ProducerConsumerWithBlocking) {
   jglockfree::SpscQueue<std::size_t, 64> queue;
 
   std::thread producer([&] {
-    std::ranges::for_each(
-        std::ranges::views::iota(std::size_t{0}, kNumItems),
-        [&queue](std::size_t i) { queue.Enqueue(std::move(i)); });
+    for (std::size_t i = 0; i < kNumItems; ++i) {
+      queue.Enqueue(std::move(i));
+    }
   });
 
   std::thread consumer([&] {
-    std::ranges::for_each(std::ranges::views::iota(std::size_t{0}, kNumItems),
-                          [&queue](std::size_t expected) {
-                            std::size_t received = queue.Dequeue();
-                            EXPECT_EQ(received, expected);
-                          });
+    for (std::size_t expected = 0; expected < kNumItems; ++expected) {
+      std::size_t received = queue.Dequeue();
+      EXPECT_EQ(received, expected);
+    }
   });
 
   producer.join();
@@ -517,21 +509,18 @@ TEST(SpscQueueBlockingTest, SlowProducerFastConsumer) {
   jglockfree::SpscQueue<std::size_t, 8> queue;
 
   std::thread producer([&] {
-    std::ranges::for_each(std::ranges::views::iota(std::size_t{0}, kNumItems),
-                          [&queue](std::size_t i) {
-                            std::this_thread::sleep_for(100us);
-                            queue.Enqueue(std::move(i));
-                          });
+    for (std::size_t i = 0; i < kNumItems; ++i) {
+      std::this_thread::sleep_for(100us);
+      queue.Enqueue(std::move(i));
+    }
   });
 
   std::thread consumer([&] {
-    std::ranges::for_each(
-        std::ranges::views::iota(std::size_t{0}, kNumItems),
-        [&queue](std::size_t expected) {
-          std::size_t received =
-              queue.Dequeue();  // Will block waiting for slow producer
-          EXPECT_EQ(received, expected);
-        });
+    for (std::size_t expected = 0; expected < kNumItems; ++expected) {
+      std::size_t received =
+          queue.Dequeue();  // Will block waiting for slow producer
+      EXPECT_EQ(received, expected);
+    }
   });
 
   producer.join();
@@ -544,20 +533,17 @@ TEST(SpscQueueBlockingTest, FastProducerSlowConsumer) {
       queue;  // Small buffer forces producer to block
 
   std::thread producer([&] {
-    std::ranges::for_each(
-        std::ranges::views::iota(std::size_t{0}, kNumItems),
-        [&queue](std::size_t i) {
-          queue.Enqueue(std::move(i));  // Will block when buffer fills
-        });
+    for (std::size_t i = 0; i < kNumItems; ++i) {
+      queue.Enqueue(std::move(i));  // Will block when buffer fills
+    }
   });
 
   std::thread consumer([&] {
-    std::ranges::for_each(std::ranges::views::iota(std::size_t{0}, kNumItems),
-                          [&queue](std::size_t expected) {
-                            std::this_thread::sleep_for(100us);
-                            std::size_t received = queue.Dequeue();
-                            EXPECT_EQ(received, expected);
-                          });
+    for (std::size_t expected = 0; expected < kNumItems; ++expected) {
+      std::this_thread::sleep_for(100us);
+      std::size_t received = queue.Dequeue();
+      EXPECT_EQ(received, expected);
+    }
   });
 
   producer.join();
@@ -600,19 +586,17 @@ TEST(SpscQueueBlockingTest, StressTestBlocking) {
   std::atomic<std::size_t> checksum_consumed{0};
 
   std::thread producer([&] {
-    auto items = std::ranges::views::iota(std::size_t{0}, kNumItems);
-    std::ranges::for_each(items, [&](std::size_t item) {
+    for (std::size_t item = 0; item < kNumItems; ++item) {
       queue.Enqueue(std::move(item));
       checksum_produced.fetch_add(item, std::memory_order_relaxed);
-    });
+    }
   });
 
   std::thread consumer([&] {
-    std::ranges::for_each(
-        std::ranges::views::iota(std::size_t{0}, kNumItems), [&](std::size_t) {
-          std::size_t val = queue.Dequeue();
-          checksum_consumed.fetch_add(val, std::memory_order_relaxed);
-        });
+    for (std::size_t i = 0; i < kNumItems; ++i) {
+      std::size_t val = queue.Dequeue();
+      checksum_consumed.fetch_add(val, std::memory_order_relaxed);
+    }
   });
 
   producer.join();
@@ -629,17 +613,16 @@ TEST(SpscQueueBlockingTest, BlockingWithMoveOnlyTypes) {
   jglockfree::SpscQueue<std::unique_ptr<int>, 4> queue;
 
   std::thread producer([&] {
-    std::ranges::for_each(std::ranges::views::iota(0, 10), [&queue](int i) {
+    for (int i = 0; i < 10; ++i) {
       queue.Enqueue(std::make_unique<int>(i));
-    });
+    }
   });
 
   std::thread consumer([&] {
-    std::ranges::for_each(std::ranges::views::iota(0, 10),
-                          [&queue](const int expected) {
-                            auto ptr = queue.Dequeue();
-                            EXPECT_EQ(*ptr, expected);
-                          });
+    for (int expected = 0; expected < 10; ++expected) {
+      auto ptr = queue.Dequeue();
+      EXPECT_EQ(*ptr, expected);
+    }
   });
 
   producer.join();

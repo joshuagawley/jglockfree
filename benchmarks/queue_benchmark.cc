@@ -3,7 +3,6 @@
 #include <jglockfree/spsc.h>
 
 #include <barrier>
-#include <ranges>
 
 #include "mutex_queue.h"
 
@@ -14,10 +13,10 @@ class QueueFixture : public benchmark::Fixture {
 
   void SetUp(const benchmark::State &state) override {
     if (state.thread_index() == 0) {
-      std::ranges::for_each(std::views::iota(0, 10'000), [&](int i) {
+      for (int i = 0; i < 10'000; ++i) {
         lock_free_queue.Enqueue(i);
         mutex_queue.Enqueue(i);
-      });
+      }
     }
   }
 };
@@ -86,8 +85,7 @@ BENCHMARK_DEFINE_F(QueueFixture, LockFreeThroughput)(benchmark::State &state) {
   for (auto _ : state) {
     if (state.thread_index() == 0) {
       // Producer: enqueue all items
-      for (const auto i :
-           std::views::iota(std::size_t{0}, kItemsPerIteration)) {
+      for (std::size_t i = 0; i < kItemsPerIteration; ++i) {
         lock_free_queue.Enqueue(i);
       }
     } else {
@@ -114,14 +112,12 @@ BENCHMARK_DEFINE_F(QueueFixture, MutexThroughput)(benchmark::State &state) {
   for (auto _ : state) {
     if (state.thread_index() == 0) {
       // Producer: enqueue all items
-      for (const auto i :
-           std::views::iota(std::size_t{0}, kItemsPerIteration)) {
+      for (std::size_t i = 0; i < kItemsPerIteration; ++i) {
         mutex_queue.Enqueue(i);
       }
     } else {
       // Consumer: dequeue all items
-      for (const auto i :
-           std::views::iota(std::size_t{0}, kItemsPerIteration)) {
+      for (std::size_t i = 0; i < kItemsPerIteration; ++i) {
         while (not mutex_queue.Dequeue().has_value()) {
           // Spin if empty
         }
@@ -307,16 +303,14 @@ BENCHMARK_DEFINE_F(SpscFixture, SpscThroughput)(benchmark::State &state) {
 
     if (state.thread_index() == 0) {
       // Producer: enqueue all items
-      for (const auto i :
-           std::views::iota(std::size_t{0}, kItemsPerIteration)) {
-        while (not spsc_queue.TryEnqueue(std::move(i))) {
+      for (std::size_t i = 0; i < kItemsPerIteration; ++i) {
+        while (not spsc_queue.TryEnqueue(i)) {
           // Spin if full
         }
       }
     } else {
       // Consumer: dequeue all items
-      for (const auto i :
-           std::views::iota(std::size_t{0}, kItemsPerIteration)) {
+      for (std::size_t i = 0; i < kItemsPerIteration; ++i) {
         while (not spsc_queue.TryDequeue().has_value()) {
           // Spin if empty
         }
@@ -342,8 +336,7 @@ BENCHMARK_DEFINE_F(SpscFixture,
   for (auto _ : state) {
     if (state.thread_index() == 0) {
       // Producer: enqueue all items using internal method (no signalling)
-      for (const auto i :
-           std::views::iota(std::size_t{0}, kItemsPerIteration)) {
+      for (std::size_t i = 0; i < kItemsPerIteration; ++i) {
         while (not spsc_queue.TryEnqueueUnsignalled(i)) {
           // Spin if full
         }

@@ -8,7 +8,6 @@
 #include <mutex>
 #include <new>
 #include <optional>
-#include <ranges>
 
 namespace jglockfree {
 
@@ -24,10 +23,10 @@ class SpscQueue {
   SpscQueue(SpscQueue &&) = delete;
   SpscQueue &operator=(SpscQueue &&) = delete;
 
-  [[nodiscard]] constexpr auto TryEnqueue(T value) -> bool;
-  [[nodiscard]] constexpr auto TryDequeue() -> std::optional<T>;
-  constexpr auto Enqueue(T value) -> void;
-  [[nodiscard]] constexpr auto Dequeue() -> T;
+  [[nodiscard]] auto TryEnqueue(T value) -> bool;
+  [[nodiscard]] auto TryDequeue() -> std::optional<T>;
+  auto Enqueue(T value) -> void;
+  [[nodiscard]] auto Dequeue() -> T;
   [[nodiscard]] constexpr auto TryEnqueueUnsignalled(T value) -> bool;
   [[nodiscard]] constexpr auto TryDequeueUnsignalled() -> std::optional<T>;
 
@@ -62,7 +61,7 @@ constexpr bool SpscQueue<T, NumSlots>::TryEnqueueUnsignalled(T value) {
 }
 
 template <typename T, std::size_t NumSlots>
-constexpr bool SpscQueue<T, NumSlots>::TryEnqueue(T value) {
+bool SpscQueue<T, NumSlots>::TryEnqueue(T value) {
   const bool success = TryEnqueueUnsignalled(std::move(value));
   if (success) {
     std::lock_guard<std::mutex> lock{mutex_};
@@ -72,9 +71,9 @@ constexpr bool SpscQueue<T, NumSlots>::TryEnqueue(T value) {
 }
 
 template <typename T, std::size_t NumSlots>
-constexpr void SpscQueue<T, NumSlots>::Enqueue(T value) {
+void SpscQueue<T, NumSlots>::Enqueue(T value) {
   // Fast path: spin for a bit
-  for (const auto i : std::ranges::views::iota(0, 1000)) {
+  for (int i = 0; i < 1000; ++i) {
     // We can't use TryEnqueueUnsignalled because it consumes the value, so
     // inline the logic
     const auto head = head_.load(std::memory_order_acquire);
@@ -130,7 +129,7 @@ constexpr std::optional<T> SpscQueue<T, NumSlots>::TryDequeueUnsignalled() {
 }
 
 template <typename T, std::size_t NumSlots>
-constexpr std::optional<T> SpscQueue<T, NumSlots>::TryDequeue() {
+std::optional<T> SpscQueue<T, NumSlots>::TryDequeue() {
   auto result = TryDequeueUnsignalled();
   if (result.has_value()) {
     std::lock_guard<std::mutex> lock{mutex_};
@@ -140,9 +139,9 @@ constexpr std::optional<T> SpscQueue<T, NumSlots>::TryDequeue() {
 }
 
 template <typename T, std::size_t NumSlots>
-constexpr T SpscQueue<T, NumSlots>::Dequeue() {
+T SpscQueue<T, NumSlots>::Dequeue() {
   // Fast path: spin for a bit
-  for (const auto i : std::ranges::views::iota(0, 1000)) {
+  for (int i = 0; i < 1000; ++i) {
     auto result = TryDequeueUnsignalled();
     if (result.has_value()) {
       not_full_.notify_one();

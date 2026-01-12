@@ -3,7 +3,6 @@
 #include <gtest/gtest.h>
 #include <jglockfree/queue.h>
 
-#include <ranges>
 #include <thread>
 
 TEST(QueueTest, EmptyQueueReturnsNullopt) {
@@ -41,26 +40,29 @@ TEST(QueueTest, ConcurrentEnqueueDequeue) {
   producers.reserve(kNumProducers);
   consumers.reserve(kNumConsumers);
 
-  std::ranges::for_each(
-      std::ranges::views::iota(0, kNumProducers), [&](const int p) {
-        producers.emplace_back([&] {
-          std::ranges::for_each(
-              std::ranges::views::iota(0, kItemsPerProducer),
-              [&](const int i) { queue.Enqueue(p * kItemsPerProducer + i); });
-        });
-      });
+  for (int p = 0; p < kNumProducers; ++p) {
+    producers.emplace_back([&queue, p] {
+      for (int i = 0; i < kItemsPerProducer; ++i) {
+        queue.Enqueue(p * kItemsPerProducer + i);
+      }
+    });
+  }
 
-  std::ranges::for_each(producers, [](auto &t) { t.join(); });
+  for (auto &t : producers) {
+    t.join();
+  }
 
-  std::ranges::for_each(std::ranges::views::iota(0, kNumConsumers), [&](int _) {
+  for (int c = 0; c < kNumConsumers; ++c) {
     consumers.emplace_back([&queue, &total_dequeued] {
       while (auto _ = queue.Dequeue()) {
         total_dequeued.fetch_add(1, std::memory_order_relaxed);
       }
     });
-  });
+  }
 
-  std::ranges::for_each(consumers, [](auto &t) { t.join(); });
+  for (auto &t : consumers) {
+    t.join();
+  }
 
   EXPECT_EQ(total_dequeued.load(), kNumProducers * kItemsPerProducer);
 }
