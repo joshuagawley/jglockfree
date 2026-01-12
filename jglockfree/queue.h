@@ -28,10 +28,10 @@ class Queue {
 
  private:
   struct Node {
-    T value;
+    std::optional<T> value;
     std::atomic<Node *> next;
 
-    constexpr Node() noexcept : next(nullptr) {}
+    constexpr Node() noexcept : value(std::nullopt), next(nullptr) {}
     explicit constexpr Node(T value) noexcept
         : value(std::move(value)), next(nullptr) {}
   };
