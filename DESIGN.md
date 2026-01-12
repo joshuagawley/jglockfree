@@ -155,4 +155,4 @@ The condition variable signaling overhead reduces throughput by roughly 63%.
 ## Further Reading
 - Michael, M. M. and Scott, M. L., "Simple, Fast, and Practical Non-Blocking and Blocking Concurrent Queue Algorithms" (PODC 1996)
 - Michael, M. M., "Hazard Pointers: Safe Memory Reclamation for Lock-Free Objects" (IEEE TPDS 2004)
-- - Thompson, M., Farley, D., Barker, M., Gee, P., and Stewart, A., "Disruptor: High performance alternative to bounded queues for exchanging data between concurrent threads" (LMAX Exchange, 2011)
+- Thompson, M., Farley, D., Barker, M., Gee, P., and Stewart, A., "Disruptor: High performance alternative to bounded queues for exchanging data between concurrent threads" (LMAX Exchange, 2011)
