@@ -28,7 +28,7 @@ class HazardPointer {
   template <typename T>
   [[nodiscard]] static constexpr auto IsProtected(T *ptr) noexcept -> bool;
 
-  constexpr auto Clear() const noexcept -> void;
+  constexpr auto Clear() noexcept -> void;
 
   template <typename T>
   constexpr static auto Retire(T *ptr) -> void;
@@ -88,7 +88,7 @@ constexpr T *HazardPointer<NumSlots>::Protect(
 }
 
 template <std::size_t NumSlots>
-constexpr void HazardPointer<NumSlots>::Clear() const noexcept {
+constexpr void HazardPointer<NumSlots>::Clear() noexcept {
   slot_->store(nullptr, std::memory_order_release);
 }
 
