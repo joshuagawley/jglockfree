@@ -5,3 +5,7 @@ gtest_discover_tests(queue_test)
 add_executable(hazard_pointer_test hazard_pointer_test.cc)
 target_link_libraries(hazard_pointer_test PRIVATE project_settings jglockfree GTest::gtest_main)
 gtest_discover_tests(hazard_pointer_test)
+
+add_executable(spsc_test spsc_test.cc)
+target_link_libraries(spsc_test PRIVATE project_settings jglockfree GTest::gtest_main)
+gtest_discover_tests(spsc_test)

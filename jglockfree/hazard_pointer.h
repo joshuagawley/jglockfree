@@ -4,6 +4,7 @@
 #define JGLOCKFREE_HAZARD_POINTER_H_
 
 #include <algorithm>
+#include <mutex>
 #include <ranges>
 #include <unordered_set>
 

@@ -58,7 +58,7 @@ storing the source pointer in the next available slot and reloading the pointer 
 slot_->store(ptr, std::memory_order_seq_cst);
 auto current = source.load(std::memory_order_seq_cst);
 ```
-On x86, acquire/release semantics would have sufficed here, since since on x86, stores are not reordered with subsequent 
+On x86, acquire/release semantics would have sufficed here, since on x86, stores are not reordered with subsequent 
 loads. On ARM, however, such a reordering is permitted. If the reload comes before the store, then a deleter could scan
 the hazard registry, see nothing, and delete the node before we reload, causing us to dereference freed memory.
 
@@ -67,17 +67,56 @@ Our implementation has the following limitations:
 1. If a thread exits with nodes in its retired list, those nodes are leaked.
 2. The queue destructor assumes no concurrent operations.
 
+## SPSC ring buffer
+A ring buffer replaces a linked list with a circular array; this eliminates allocation in the hot path and provides 
+better cache locality, at the cost of bounding the size of the queue.
+The single-producer-single-consumer (SPSC) variant is the simplest to implement, as single ownership of each index
+eliminates the need for compare-and-swap operations.
+
+### Core structure
+The buffer uses two atomic indices: `head_` (where the consumer reads) and `tail_` (where the producer writes).
+The producer only writes to `tail_` and the consumer only reads from `head_`. This single-writer property means that we
+need only use simple loads and stores.
+
+### Full/empty disambiguation
+Both "completely full" and "completely empty" could be represented by `head_ == tail_` if we used all slots. However, 
+we would then need to use a separate count variable which would introduce contention between producers and consumers on
+a shared cache line. To obviate this, we sacrifice one slot to distinguish between the two states; the queue is empty
+when `head_ == tail_` and the queue is full when `(tail_ + 1) % size == head_`.
+
+### Memory ordering
+The producer loads `head_` with acquire to synchronize with the consumer's release store, ensuring the consumer has
+finished reading from a slot before we overwrite it.
+The producer stores `tail_` with release to push the data; using release ensures that any consumer that sees the new 
+tail is guaranteed to see the data. 
+The consumer follows the inverse pattern; loading `tail_` with acquire and storing `head_` with release.
+Using relaxed ordering here would allow the CPU to reorder operations such that a reader sees the updated index before
+the data is written, and therefore the reader would read uninitialized memory.
+
+### Blocking variants
+The blocking `Enqueue()` and `Dequeue()` methods use an adaptive spin-then-block strategy; they spin for 1000 iterations
+attempting the lock-free path, then fall back to a mutex-based path if the lock-free path fails.
+This optimizes for short waits while remaining efficient for long waits.
+The spin loop includes architecture-specific pause hints (`yield` on ARM, `pause` on x86).
+
+### Signaling overhead
+To support mixing blocking and non-blocking callers, `TryEnqueue()` and `TryDequeue()` signal condition variables on
+success.
+This roughly halves throughput compared to the raw lock-free path.
+For maximum performance when blocking is not needed, use `TryEnqueueUnsignalled()` and `TryDequeueUnsignalled()`.
+
 ## Benchmarks
 The following results are wall-clock times per operation, recorded on a Apple M1 processor.
 
-### Benchmark Results
+### Mutex-based queue vs lock-free queue
+We first compare the performance of the lock-free queue with the mutex-based queue.
 
 | Threads | Lock-Free Enqueue | Mutex Enqueue | Lock-Free Mixed | Mutex Mixed |
 |---------|-------------------|---------------|-----------------|-------------|
-| 1       | 14.3 ns           | 9.69 ns       | 13.3 ns         | 10.9 ns     |
-| 2       | 105 ns            | 34.0 ns       | 43.1 ns         | 33.4 ns     |
-| 4       | 612 ns            | 109 ns        | 188 ns          | 99.8 ns     |
-| 8       | 1964 ns           | 318 ns        | 960 ns          | 270 ns      |
+| 1       | 13.1 ns           | 12.3 ns       | 13.4 ns         | 10.0 ns     |
+| 2       | 106 ns            | 36.3 ns       | 39.2 ns         | 32.5 ns     |
+| 4       | 252 ns            | 116 ns        | 179 ns          | 123 ns      |
+| 8       | 1769 ns           | 276 ns        | 541 ns          | 262 ns      |
 
 The lock-free queue is generally less performant than the mutex-based queue. This is due to the following reasons:
 - The lock-free queue includes hazard pointer overhead: sequentially consistent memory ordering on every protect
@@ -96,12 +135,24 @@ queue to place them on separate cache lines.
 Lock-free queues still confer advantages such as non-blocking guarantees, lack of priority inversion, and bounded 
 worst-case latency per operation (no thread can block another indefinitely).
 
-## Alternatives
-At the cost of bounding the size of the queue, one could use a _ring buffer_ instead of this approach. This uses
-a circular array rather than a linked list as the underlying data structure, so we get the obvious cache locality 
-benefits and predictable memory usage from the array layout, as well as avoiding allocation in the hot path. 
-Ring buffers are common in latency-critical applications such as trading systems.
+### SPSC vs M&S queue
+Now we compare the performance of the two queues above with the SPSC queue.
+For the SPSC queue, the only valid configuration is a single producer and single consumer.
+We compare sustained throughput (measured in items per second) across all three implementations under this workload:
+
+| Queue                  | Throughput      | Time per item |
+|------------------------|-----------------|---------------|
+| Mutex                  | 43.7M items/sec | ~23 ns        |
+| SPSC unsignalled       | 41.2M items/sec | ~24 ns        |
+| M&S lock-free          | 34.0M items/sec | ~29 ns        |
+| SPSC (with signalling) | 15.3M items/sec | ~65 ns        |
+
+The raw SPSC ring buffer achieves 41.2M items per second, nearly matching the mutex queue and 21% faster than the M&S
+lock-free queue. The SPSC queue's throughput is constrained by cross-core communication; even without signaling, each
+operation requires the other core to observe the updated index.
+The condition variable signaling overhead reduces throughput by roughly 63%.
 
 ## Further Reading
 - Michael, M. M. and Scott, M. L., "Simple, Fast, and Practical Non-Blocking and Blocking Concurrent Queue Algorithms" (PODC 1996)
 - Michael, M. M., "Hazard Pointers: Safe Memory Reclamation for Lock-Free Objects" (IEEE TPDS 2004)
+- - Thompson, M., Farley, D., Barker, M., Gee, P., and Stewart, A., "Disruptor: High performance alternative to bounded queues for exchanging data between concurrent threads" (LMAX Exchange, 2011)
