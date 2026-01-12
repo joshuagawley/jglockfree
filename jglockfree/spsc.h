@@ -5,9 +5,14 @@
 
 #include <array>
 #include <atomic>
+#include <condition_variable>
 #include <mutex>
 #include <new>
 #include <optional>
+
+#if defined(__x86_64__)
+#include <immintrin.h>  // for _mm_pause
+#endif
 
 namespace jglockfree {
 
