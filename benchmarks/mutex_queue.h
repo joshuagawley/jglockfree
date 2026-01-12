@@ -8,24 +8,29 @@
 template <typename T>
 class MutexQueue {
  public:
-  void Enqueue(T value) {
-    std::lock_guard lock(mutex_);
-    queue_.push(std::move(value));
-  }
-
-  std::optional<T> Dequeue() {
-    std::lock_guard lock(mutex_);
-    if (queue_.empty()) {
-      return std::nullopt;
-    }
-    T value = std::move(queue_.front());
-    queue_.pop();
-    return value;
-  }
+  auto Enqueue(T value) -> void;
+  auto Dequeue() -> std::optional<T>;
 
  private:
   std::queue<T> queue_;
   std::mutex mutex_;
 };
+
+template <typename T>
+void MutexQueue<T>::Enqueue(T value) {
+  std::lock_guard lock(mutex_);
+  queue_.push(std::move(value));
+}
+
+template <typename T>
+std::optional<T> MutexQueue<T>::Dequeue() {
+  std::lock_guard lock(mutex_);
+  if (queue_.empty()) {
+    return std::nullopt;
+  }
+  T value = std::move(queue_.front());
+  queue_.pop();
+  return value;
+}
 
 #endif  // JGLOCKFREE_MUTEX_QUEUE_H

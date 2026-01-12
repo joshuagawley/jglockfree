@@ -27,12 +27,12 @@ class SpscQueue {
   SpscQueue(SpscQueue&&) = delete;
   SpscQueue& operator=(SpscQueue&&) = delete;
 
-  bool TryEnqueue(T &&value);
-  std::optional<T> TryDequeue();
-  void Enqueue(T &&value);
-  T Dequeue();
-  bool TryEnqueueUnsignalled(T &&value);
-  std::optional<T> TryDequeueUnsignalled();
+  auto TryEnqueue(T &&value) -> bool;
+  auto TryDequeue() -> std::optional<T>;
+  auto Enqueue(T &&value) -> void;
+  auto Dequeue() -> T;
+  auto TryEnqueueUnsignalled(T &&value) -> bool;
+  auto TryDequeueUnsignalled() -> std::optional<T>;
   private:
     alignas(std::hardware_destructive_interference_size) std::array<T, NumSlots + 1> slots_;
     alignas(std::hardware_destructive_interference_size) std::atomic<std::size_t> head_;

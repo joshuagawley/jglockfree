@@ -23,8 +23,8 @@ class Queue {
   Queue(Queue &&) = delete;
   Queue &operator=(Queue &&) = delete;
 
-  void Enqueue(T value);
-  std::optional<T> Dequeue() noexcept;
+  auto Enqueue(T value) -> void;
+  auto Dequeue() noexcept -> std::optional<T>;
 
  private:
   struct Node {

@@ -22,18 +22,18 @@ class HazardPointer {
   ~HazardPointer() noexcept;
 
   template <typename T>
-  constexpr T *Protect(std::atomic<T *> &source) noexcept;
+  constexpr auto Protect(std::atomic<T *> &source) noexcept -> T *;
 
   template <typename T>
-  static constexpr bool IsProtected(T *ptr) noexcept;
+  static constexpr auto IsProtected(T *ptr) noexcept -> bool;
 
-  constexpr void Clear() const noexcept;
+  constexpr auto Clear() const noexcept -> void;
 
   template <typename T>
-  static void Retire(T *ptr);
+  static auto Retire(T *ptr) -> void;
 
  private:
-  static void Scan();
+  static auto Scan() -> void;
 
   static inline std::array<std::atomic<void *>, NumSlots> slots_{};
   static inline std::atomic<std::size_t> next_slot_{0};
