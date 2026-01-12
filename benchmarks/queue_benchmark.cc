@@ -42,19 +42,25 @@ class SpscFixture : public benchmark::Fixture {
   }
 };
 
+// clang-format off
 BENCHMARK_DEFINE_F(QueueFixture, LockFreeEnqueue)(benchmark::State &state) {
+// clang-format on
   for (auto _ : state) {
     lock_free_queue.Enqueue(42);
   }
 }
 
+// clang-format off
 BENCHMARK_DEFINE_F(QueueFixture, MutexEnqueue)(benchmark::State &state) {
+// clang-format on
   for (auto _ : state) {
     mutex_queue.Enqueue(42);
   }
 }
 
+// clang-format off
 BENCHMARK_DEFINE_F(QueueFixture, LockFreeMixed)(benchmark::State &state) {
+// clang-format on
   for (auto _ : state) {
     if (state.thread_index() % 2 == 0) {
       lock_free_queue.Enqueue(42);
@@ -64,7 +70,9 @@ BENCHMARK_DEFINE_F(QueueFixture, LockFreeMixed)(benchmark::State &state) {
   }
 }
 
+// clang-format off
 BENCHMARK_DEFINE_F(QueueFixture, MutexMixed)(benchmark::State &state) {
+// clang-format on
   for (auto _ : state) {
     if (state.thread_index() % 2 == 0) {
       mutex_queue.Enqueue(42);
@@ -74,7 +82,9 @@ BENCHMARK_DEFINE_F(QueueFixture, MutexMixed)(benchmark::State &state) {
   }
 }
 
+// clang-format off
 BENCHMARK_DEFINE_F(QueueFixture, LockFreeThroughput)(benchmark::State &state) {
+// clang-format on
   if (state.threads() != 2) {
     state.SkipWithError("Throughput benchmark requires exactly 2 threads");
     return;
@@ -101,7 +111,9 @@ BENCHMARK_DEFINE_F(QueueFixture, LockFreeThroughput)(benchmark::State &state) {
   state.SetItemsProcessed(state.iterations() * kItemsPerIteration);
 }
 
+// clang-format off
 BENCHMARK_DEFINE_F(QueueFixture, MutexThroughput)(benchmark::State &state) {
+// clang-format on
   if (state.threads() != 2) {
     state.SkipWithError("Throughput benchmark requires exactly 2 threads");
     return;
@@ -128,7 +140,9 @@ BENCHMARK_DEFINE_F(QueueFixture, MutexThroughput)(benchmark::State &state) {
   state.SetItemsProcessed(state.iterations() * kItemsPerIteration);
 }
 
+// clang-format off
 BENCHMARK_DEFINE_F(SpscFixture, SpscTryPaired)(benchmark::State &state) {
+// clang-format on
   // Ensure exactly 2 threads
   if (state.threads() != 2) {
     state.SkipWithError("SPSC requires exactly 2 threads");
@@ -150,7 +164,9 @@ BENCHMARK_DEFINE_F(SpscFixture, SpscTryPaired)(benchmark::State &state) {
   }
 }
 
+// clang-format off
 BENCHMARK_DEFINE_F(SpscFixture, SpscBlockingPaired)(benchmark::State &state) {
+// clang-format on
   if (state.threads() != 2) {
     state.SkipWithError("SPSC requires exactly 2 threads");
     return;
@@ -178,7 +194,9 @@ BENCHMARK_DEFINE_F(SpscFixture, SpscBlockingPaired)(benchmark::State &state) {
 // the consumer just synchronises but doesn't dequeue.
 // ============================================================================
 
+// clang-format off
 BENCHMARK_DEFINE_F(SpscFixture, SpscTryEnqueueOnly)(benchmark::State &state) {
+// clang-format on
   if (state.threads() != 2) {
     state.SkipWithError("SPSC requires exactly 2 threads");
     return;
@@ -200,8 +218,9 @@ BENCHMARK_DEFINE_F(SpscFixture, SpscTryEnqueueOnly)(benchmark::State &state) {
   }
 }
 
-BENCHMARK_DEFINE_F(SpscFixture,
-                   SpscBlockingEnqueueOnly)(benchmark::State &state) {
+// clang-format off
+BENCHMARK_DEFINE_F(SpscFixture, SpscBlockingEnqueueOnly)(benchmark::State &state) {
+// clang-format on
   if (state.threads() != 2) {
     state.SkipWithError("SPSC requires exactly 2 threads");
     return;
@@ -230,7 +249,9 @@ BENCHMARK_DEFINE_F(SpscFixture,
 // the producer just synchronises and refills.
 // ============================================================================
 
+// clang-format off
 BENCHMARK_DEFINE_F(SpscFixture, SpscTryDequeueOnly)(benchmark::State &state) {
+// clang-format on
   if (state.threads() != 2) {
     state.SkipWithError("SPSC requires exactly 2 threads");
     return;
@@ -256,8 +277,9 @@ BENCHMARK_DEFINE_F(SpscFixture, SpscTryDequeueOnly)(benchmark::State &state) {
   }
 }
 
-BENCHMARK_DEFINE_F(SpscFixture,
-                   SpscBlockingDequeueOnly)(benchmark::State &state) {
+// clang-format off
+BENCHMARK_DEFINE_F(SpscFixture, SpscBlockingDequeueOnly)(benchmark::State &state) {
+// clang-format on
   if (state.threads() != 2) {
     state.SkipWithError("SPSC requires exactly 2 threads");
     return;
@@ -290,7 +312,9 @@ BENCHMARK_DEFINE_F(SpscFixture,
 // N items, measure total time. This captures realistic pipelining behaviour.
 // ============================================================================
 
+// clang-format off
 BENCHMARK_DEFINE_F(SpscFixture, SpscThroughput)(benchmark::State &state) {
+// clang-format on
   if (state.threads() != 2) {
     state.SkipWithError("SPSC requires exactly 2 threads");
     return;
@@ -324,8 +348,9 @@ BENCHMARK_DEFINE_F(SpscFixture, SpscThroughput)(benchmark::State &state) {
   state.SetItemsProcessed(state.iterations() * kItemsPerIteration);
 }
 
-BENCHMARK_DEFINE_F(SpscFixture,
-                   SpscThroughputInternal)(benchmark::State &state) {
+// clang-format off
+BENCHMARK_DEFINE_F(SpscFixture, SpscThroughputInternal)(benchmark::State &state) {
+// clang-format on
   if (state.threads() != 2) {
     state.SkipWithError("SPSC requires exactly 2 threads");
     return;
