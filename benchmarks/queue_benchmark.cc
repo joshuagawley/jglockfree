@@ -3,7 +3,6 @@
 #include <jglockfree/spsc.h>
 
 #include <barrier>
-#include <latch>
 #include <ranges>
 
 #include "mutex_queue.h"

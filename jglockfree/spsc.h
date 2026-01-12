@@ -3,13 +3,12 @@
 #ifndef JGLOCKFREE_SPSC_H
 #define JGLOCKFREE_SPSC_H
 
-#include <__new/interference_size.h>
-#include <__ranges/iota_view.h>
-
 #include <array>
 #include <atomic>
 #include <mutex>
+#include <new>
 #include <optional>
+#include <ranges>
 
 namespace jglockfree {
 
