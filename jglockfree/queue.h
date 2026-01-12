@@ -112,10 +112,10 @@ std::optional<T> Queue<T>::Dequeue() noexcept {
                                     std::memory_order_release,
                                     std::memory_order_relaxed);
       } else {
-        auto value = next_ptr->value;
         if (head_.compare_exchange_weak(old_head_ptr, next_ptr,
                                         std::memory_order_release,
                                         std::memory_order_relaxed)) {
+          auto value = std::move(next_ptr->value);
           hp_head.Retire(old_head_ptr);
           hp_head.Clear();
           hp_next.Clear();
