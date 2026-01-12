@@ -113,10 +113,10 @@ We first compare the performance of the lock-free queue with the mutex-based que
 
 | Threads | Lock-Free Enqueue | Mutex Enqueue | Lock-Free Mixed | Mutex Mixed |
 |---------|-------------------|---------------|-----------------|-------------|
-| 1       | 13.1 ns           | 12.3 ns       | 13.4 ns         | 10.0 ns     |
-| 2       | 106 ns            | 36.3 ns       | 39.2 ns         | 32.5 ns     |
-| 4       | 252 ns            | 116 ns        | 179 ns          | 123 ns      |
-| 8       | 1769 ns           | 276 ns        | 541 ns          | 262 ns      |
+| 1       | 18.1 ns           | 9.85 ns       | 13.6 ns         | 9.71 ns     |
+| 2       | 108 ns            | 35.2 ns       | 35.1 ns         | 32.1 ns     |
+| 4       | 241 ns            | 120 ns        | 123 ns          | 78.3 ns     |
+| 8       | 1009 ns           | 281 ns        | 682 ns          | 269 ns      |
 
 The lock-free queue is generally less performant than the mutex-based queue. This is due to the following reasons:
 - The lock-free queue includes hazard pointer overhead: sequentially consistent memory ordering on every protect
@@ -140,17 +140,36 @@ Now we compare the performance of the two queues above with the SPSC queue.
 For the SPSC queue, the only valid configuration is a single producer and single consumer.
 We compare sustained throughput (measured in items per second) across all three implementations under this workload:
 
-| Queue                  | Throughput      | Time per item |
-|------------------------|-----------------|---------------|
-| Mutex                  | 43.7M items/sec | ~23 ns        |
-| SPSC unsignalled       | 41.2M items/sec | ~24 ns        |
-| M&S lock-free          | 34.0M items/sec | ~29 ns        |
-| SPSC (with signalling) | 15.3M items/sec | ~65 ns        |
+| Queue                  | Throughput       | Time per item |
+|------------------------|------------------|---------------|
+| SPSC unsignalled       | 40.2M items/sec  | ~25 ns        |
+| Mutex                  | 35.0M items/sec  | ~29 ns        |
+| M&S lock-free          | 26.1M items/sec  | ~38 ns        |
+| SPSC (with signalling) | 16.3M items/sec  | ~61 ns        |
 
-The raw SPSC ring buffer achieves 41.2M items per second, nearly matching the mutex queue and 21% faster than the M&S
+
+The raw SPSC ring buffer achieves 40.2M items per second, nearly matching the mutex queue and 21% faster than the M&S
 lock-free queue. The SPSC queue's throughput is constrained by cross-core communication; even without signaling, each
 operation requires the other core to observe the updated index.
 The condition variable signaling overhead reduces throughput by roughly 63%.
+
+### Tail latency
+While the lock-free queue has lower throughput than the mutex queue, it provides better tail latency under contention.
+At 8 threads (mixed enqueue/dequeue workload):
+
+| Percentile | Lock-Free | Mutex   |
+|------------|-----------|---------|
+| p50        | 3.5 µs    | 4.1 µs  |
+| p99        | 10 µs     | 44.5 µs |
+| p999       | 173 µs    | 120 µs  |
+
+The lock free queue's 99th percentile is 4.5x lower because no thread can block another; contention results in CAS
+retries rather than blocking.
+The higher 999th percentile and maximum latency for the lock-free queue is due to the periodic hazard pointer scanning
+per-operation scanning and per-operation memory allocation.
+
+For latency-sensitive applications where p99 matters more than throughput, the lock-free
+queue is preferable despite its lower average performance.
 
 ## Further Reading
 - Michael, M. M. and Scott, M. L., "Simple, Fast, and Practical Non-Blocking and Blocking Concurrent Queue Algorithms" (PODC 1996)

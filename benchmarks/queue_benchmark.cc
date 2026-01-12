@@ -2,6 +2,7 @@
 #include <jglockfree/queue.h>
 #include <jglockfree/spsc.h>
 
+#include <chrono>
 #include <barrier>
 
 #include "mutex_queue.h"
@@ -139,6 +140,81 @@ BENCHMARK_DEFINE_F(QueueFixture, MutexThroughput)(benchmark::State &state) {
 
   state.SetItemsProcessed(state.iterations() * kItemsPerIteration);
 }
+
+// clang-format off
+BENCHMARK_DEFINE_F(QueueFixture, LockFreeLatencyDistribution)(benchmark::State &state) {
+// clang-format on
+  std::vector<int64_t> latencies;
+  latencies.reserve(state.max_iterations);
+
+  for (auto _ : state) {
+    state.PauseTiming();
+    auto t0 = std::chrono::high_resolution_clock::now();
+    state.ResumeTiming();
+
+    lock_free_queue.Enqueue(42);
+    benchmark::DoNotOptimize(lock_free_queue.Dequeue());
+
+    state.PauseTiming();
+    auto t1 = std::chrono::high_resolution_clock::now();
+    auto ns = std::chrono::duration_cast<std::chrono::nanoseconds>(t1 - t0).count();
+    latencies.push_back(ns);
+    state.ResumeTiming();
+  }
+
+  if (state.thread_index() == 0 && !latencies.empty()) {
+    std::ranges::sort(latencies);
+
+    auto percentile = [&](double p) -> double {
+      const auto idx = static_cast<std::size_t>(p * static_cast<double>(latencies.size() - 1));
+      return static_cast<double>(latencies[idx]);
+    };
+
+    state.counters["p50_ns"] = percentile(0.50);
+    state.counters["p90_ns"] = percentile(0.90);
+    state.counters["p99_ns"] = percentile(0.99);
+    state.counters["p999_ns"] = percentile(0.999);
+    state.counters["max_ns"] = static_cast<double>(latencies.back());
+  }
+}
+
+// clang-format off
+BENCHMARK_DEFINE_F(QueueFixture, MutexLatencyDistribution)(benchmark::State &state) {
+// clang-format on
+  std::vector<int64_t> latencies;
+  latencies.reserve(state.max_iterations);
+
+  for (auto _ : state) {
+    state.PauseTiming();
+    auto t0 = std::chrono::high_resolution_clock::now();
+    state.ResumeTiming();
+
+    mutex_queue.Enqueue(42);
+    benchmark::DoNotOptimize(mutex_queue.Dequeue());
+
+    state.PauseTiming();
+    auto t1 = std::chrono::high_resolution_clock::now();
+    auto ns = std::chrono::duration_cast<std::chrono::nanoseconds>(t1 - t0).count();
+    latencies.push_back(ns);
+    state.ResumeTiming();
+  }
+
+  if (state.thread_index() == 0 && !latencies.empty()) {
+    std::ranges::sort(latencies);
+
+    auto percentile = [&](double p) -> double {
+      auto idx = static_cast<std::size_t>(p * static_cast<double>(latencies.size() - 1));
+      return static_cast<double>(latencies[idx]);
+    };
+
+    state.counters["p50_ns"] = percentile(0.50);
+    state.counters["p90_ns"] = percentile(0.90);
+    state.counters["p99_ns"] = percentile(0.99);
+    state.counters["p999_ns"] = percentile(0.999);
+    state.counters["max_ns"] = static_cast<double>(latencies.back());
+  }
+}
+
 
 // clang-format off
 BENCHMARK_DEFINE_F(SpscFixture, SpscTryPaired)(benchmark::State &state) {
@@ -399,6 +475,20 @@ BENCHMARK_REGISTER_F(QueueFixture, MutexMixed)
     ->Threads(2)
     ->Threads(4)
     ->Threads(8);
+BENCHMARK_REGISTER_F(QueueFixture, LockFreeLatencyDistribution)
+    ->Threads(1)
+    ->Threads(2)
+    ->Threads(4)
+    ->Threads(8)
+    ->Iterations(100000)
+    ->Unit(benchmark::kNanosecond);
+BENCHMARK_REGISTER_F(QueueFixture, MutexLatencyDistribution)
+    ->Threads(1)
+    ->Threads(2)
+    ->Threads(4)
+    ->Threads(8)
+    ->Iterations(100000)
+    ->Unit(benchmark::kNanosecond);
 
 BENCHMARK_REGISTER_F(SpscFixture, SpscTryPaired)->Threads(2);
 BENCHMARK_REGISTER_F(SpscFixture, SpscBlockingPaired)->Threads(2);
