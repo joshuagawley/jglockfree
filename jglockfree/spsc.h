@@ -24,11 +24,11 @@ class SpscQueue {
   SpscQueue(SpscQueue &&) = delete;
   SpscQueue &operator=(SpscQueue &&) = delete;
 
-  [[nodiscard]] constexpr auto TryEnqueue(T &&value) -> bool;
+  [[nodiscard]] constexpr auto TryEnqueue(T value) -> bool;
   [[nodiscard]] constexpr auto TryDequeue() -> std::optional<T>;
-  constexpr auto Enqueue(T &&value) -> void;
+  constexpr auto Enqueue(T value) -> void;
   [[nodiscard]] constexpr auto Dequeue() -> T;
-  [[nodiscard]] constexpr auto TryEnqueueUnsignalled(T &&value) -> bool;
+  [[nodiscard]] constexpr auto TryEnqueueUnsignalled(T value) -> bool;
   [[nodiscard]] constexpr auto TryDequeueUnsignalled() -> std::optional<T>;
 
  private:
@@ -46,7 +46,7 @@ class SpscQueue {
 };
 
 template <typename T, std::size_t NumSlots>
-constexpr bool SpscQueue<T, NumSlots>::TryEnqueueUnsignalled(T &&value) {
+constexpr bool SpscQueue<T, NumSlots>::TryEnqueueUnsignalled(T value) {
   const auto head = head_.load(std::memory_order_acquire);
   const auto tail = tail_.load(std::memory_order_relaxed);
   const auto new_tail = (tail + 1) % (NumSlots + 1);
@@ -62,7 +62,7 @@ constexpr bool SpscQueue<T, NumSlots>::TryEnqueueUnsignalled(T &&value) {
 }
 
 template <typename T, std::size_t NumSlots>
-constexpr bool SpscQueue<T, NumSlots>::TryEnqueue(T &&value) {
+constexpr bool SpscQueue<T, NumSlots>::TryEnqueue(T value) {
   const bool success = TryEnqueueUnsignalled(std::move(value));
   if (success) {
     std::lock_guard<std::mutex> lock{mutex_};
@@ -72,10 +72,19 @@ constexpr bool SpscQueue<T, NumSlots>::TryEnqueue(T &&value) {
 }
 
 template <typename T, std::size_t NumSlots>
-constexpr void SpscQueue<T, NumSlots>::Enqueue(T &&value) {
+constexpr void SpscQueue<T, NumSlots>::Enqueue(T value) {
   // Fast path: spin for a bit
   for (const auto i : std::ranges::views::iota(0, 1000)) {
-    if (TryEnqueueUnsignalled(std::move(value))) {
+    // We can't use TryEnqueueUnsignalled because it consumes the value, so
+    // inline the logic
+    const auto head = head_.load(std::memory_order_acquire);
+    const auto tail = tail_.load(std::memory_order_relaxed);
+    const auto new_tail = (tail + 1) % (NumSlots + 1);
+
+    if (new_tail != head) {
+      // Space available—now we can move
+      slots_[tail] = std::move(value);
+      tail_.store(new_tail, std::memory_order_release);
       not_empty_.notify_one();
       return;
     }
@@ -90,8 +99,17 @@ constexpr void SpscQueue<T, NumSlots>::Enqueue(T &&value) {
 
   // Slow path: give up and block
   std::unique_lock<std::mutex> lock{mutex_};
-  not_full_.wait(
-      lock, [this, &value] { return TryEnqueueUnsignalled(std::move(value)); });
+  not_full_.wait(lock, [this] {
+    const auto head = head_.load(std::memory_order_acquire);
+    const auto tail = tail_.load(std::memory_order_relaxed);
+    return (tail + 1) % (NumSlots + 1) != head;
+  });
+
+  // Now we have space—move the value in
+  const auto tail = tail_.load(std::memory_order_relaxed);
+  const auto new_tail = (tail + 1) % (NumSlots + 1);
+  slots_[tail] = std::move(value);
+  tail_.store(new_tail, std::memory_order_release);
   not_empty_.notify_one();
 }
 

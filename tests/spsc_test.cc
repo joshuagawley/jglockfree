@@ -436,6 +436,56 @@ TEST(SpscQueueBlockingTest, BlockingEnqueueReturnsImmediatelyWhenNotFull) {
   EXPECT_EQ(queue.TryDequeue(), 42);
 }
 
+TEST(SpscQueueBlockingTest, EnqueueDoesNotConsumeValueOnFullQueue) {
+  // Regression test: Enqueue must not move-from value until space is available.
+  // Previously, Enqueue called std::move(value) on every spin iteration,
+  // corrupting move-only types when the queue was full.
+
+  jglockfree::SpscQueue<std::unique_ptr<int>, 2> queue;  // capacity of 2
+
+  // Fill the queue
+  ASSERT_TRUE(queue.TryEnqueue(std::make_unique<int>(1)));
+  ASSERT_TRUE(queue.TryEnqueue(std::make_unique<int>(2)));
+  ASSERT_FALSE(queue.TryEnqueue(std::make_unique<int>(3)));  // full
+
+  std::atomic<bool> enqueue_started{false};
+  std::atomic<bool> enqueue_done{false};
+  int received_value = -1;
+
+  // Producer: will block because queue is full
+  std::thread producer([&] {
+    auto ptr = std::make_unique<int>(42);
+    enqueue_started.store(true, std::memory_order_release);
+    queue.Enqueue(std::move(ptr));  // blocks until consumer makes space
+    enqueue_done.store(true, std::memory_order_release);
+  });
+
+  // Wait for producer to start spinning/blocking
+  while (not enqueue_started.load(std::memory_order_acquire)) {
+    std::this_thread::yield();
+  }
+  std::this_thread::sleep_for(std::chrono::milliseconds(10));
+
+  // Producer should still be blocked
+  EXPECT_FALSE(enqueue_done.load(std::memory_order_acquire));
+
+  // Consumer: drain one item to make space
+  auto first = queue.Dequeue();
+  EXPECT_EQ(*first, 1);
+
+  // Wait for producer to complete
+  producer.join();
+  EXPECT_TRUE(enqueue_done.load(std::memory_order_acquire));
+
+  // Drain remaining items and verify the blocked value arrived intact
+  auto second = queue.Dequeue();
+  EXPECT_EQ(*second, 2);
+
+  auto third = queue.Dequeue();
+  ASSERT_NE(third, nullptr) << "Value was corrupted by premature move";
+  EXPECT_EQ(*third, 42) << "Value was corrupted by premature move";
+}
+
 // ============================================================================
 // Producer-Consumer with Blocking
 // ============================================================================
