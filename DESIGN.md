@@ -106,7 +106,7 @@ This roughly halves throughput compared to the raw lock-free path.
 For maximum performance when blocking is not needed, use `TryEnqueueUnsignalled()` and `TryDequeueUnsignalled()`.
 
 ## Benchmarks
-The following results are wall-clock times per operation, recorded on a Apple M1 processor.
+The following results are wall-clock times per operation, recorded on an Apple M1 processor.
 
 ### Mutex-based queue vs lock-free queue
 We first compare the performance of the lock-free queue with the mutex-based queue.
@@ -148,8 +148,9 @@ We compare sustained throughput (measured in items per second) across all three 
 | SPSC (with signalling) | 16.3M items/sec  | ~61 ns        |
 
 
-The raw SPSC ring buffer achieves 40.2M items per second, nearly matching the mutex queue and 21% faster than the M&S
-lock-free queue. The SPSC queue's throughput is constrained by cross-core communication; even without signaling, each
+The raw SPSC ring buffer achieves 40.2M items per second, outperforming both the mutex queue and the M&S
+lock-free queue. 
+The SPSC queue's throughput is constrained by cross-core communication; even without signaling, each
 operation requires the other core to observe the updated index.
 The condition variable signaling overhead reduces throughput by roughly 63%.
 
@@ -163,7 +164,7 @@ At 8 threads (mixed enqueue/dequeue workload):
 | p99        | 10 µs     | 44.5 µs |
 | p999       | 173 µs    | 120 µs  |
 
-The lock free queue's 99th percentile is 4.5x lower because no thread can block another; contention results in CAS
+The lock free queue's 99th percentile is 4.5 times lower because no thread can block another; contention results in CAS
 retries rather than blocking.
 The higher 999th percentile and maximum latency for the lock-free queue is due to the periodic hazard pointer scanning
 per-operation scanning and per-operation memory allocation.
