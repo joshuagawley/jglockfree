@@ -37,7 +37,7 @@ jobs:
           ASAN_OPTIONS: ${{ matrix.sanitizer == 'asan' && 'detect_leaks=0' || '' }}
           TSAN_OPTIONS: ${{ matrix.sanitizer == 'tsan' && format('suppressions={0}/tsan_suppressions.txt', github.workspace) || '' }}
 
-# TODO: fix clang-format errors
+  # TODO: fix clang-format errors
 #  format:
 #    runs-on: ubuntu-24.04
 #
