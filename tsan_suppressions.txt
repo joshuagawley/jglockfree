@@ -1,2 +1,8 @@
+# TSan false positives from allocator address reuse.
+# When thread A deletes memory and thread B allocates, the allocator may
+# return the same address. TSan sees concurrent writes to the same location
+# but the allocator's internal synchronization is correct.
+# See: https://github.com/google/sanitizers/wiki/ThreadSanitizerSuppressions
+
 race:operator new
 race:operator delete
