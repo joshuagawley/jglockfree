@@ -66,10 +66,24 @@ the hazard registry, see nothing, and delete the node before we reload, causing 
 The `Scan()` function uses a stack-allocated array with linear search rather than `std::unordered_set`.
 For the default 128 slots, this is approximately 25% faster due to eliminated heap allocations and better cache locality.
 
-### Limitations
+## Object pooling
+Now we move on to discuss optimizations specific to the M&S queue.
+In a naïve implementation, on each enqueue/dequeue operation, we either allocate or delete a node.
+Having allocation in the hot path is problematic since the system allocator uses locks when allocating and deallocating
+memory, so this would defeat the point of having a lock-free queue.
+ 
+The solution is using a _free list_; each node is allocated from a pool of fixed-size objects.
+Each thread has its own free list, as a global free list causes massive contention between threads.
+When a node is created, it is allocated from memory already in the pool, and when a node is destroyed, the node's memory
+is returned to the pool.
+
+
+## Limitations
 Our implementation has the following limitations:
-1. If a thread exits with nodes in its retired list, those nodes are leaked.
-2. The queue destructor assumes no concurrent operations.
+1. The queue destructor assumes no concurrent operations.
+2. With thread local free lists, the producer's thread's free list empties as nodes are allocated
+while the consumer's free list keeps growing as nodes are retired. This could result in unbounded memory consumption.
+
 
 ## SPSC ring buffer
 A ring buffer replaces a linked list with a circular array; this eliminates allocation in the hot path and provides 
@@ -117,10 +131,10 @@ We first compare the performance of the lock-free queue with the mutex-based que
 
 | Threads | Lock-Free Enqueue | Mutex Enqueue | Lock-Free Mixed | Mutex Mixed |
 |---------|-------------------|---------------|-----------------|-------------|
-| 1       | 18.1 ns           | 9.85 ns       | 13.6 ns         | 9.71 ns     |
-| 2       | 108 ns            | 35.2 ns       | 35.1 ns         | 32.1 ns     |
-| 4       | 241 ns            | 120 ns        | 123 ns          | 78.3 ns     |
-| 8       | 1009 ns           | 281 ns        | 682 ns          | 269 ns      |
+| 1       | 13.4 ns           | 9.55 ns       | 13.3 ns         | 9.97 ns     |
+| 2       | 80.9 ns           | 34.1 ns       | 25.5 ns         | 30.5 ns     |
+| 4       | 283 ns            | 92.9 ns       | 118 ns          | 82.8 ns     |
+| 8       | 1593 ns           | 270 ns        | 548 ns          | 250 ns      |
 
 The lock-free queue is generally less performant than the mutex-based queue. This is due to the following reasons:
 - The lock-free queue includes hazard pointer overhead: sequentially consistent memory ordering on every protect
@@ -128,8 +142,6 @@ operation and periodic scanning of the hazard registry during retirement.
 - The mutex queue has a small critical region: just a single `push` or `pop` operation on a `std::queue`, which involves
 a handful of pointer manipulations and maybe an amortized allocation. The lock is therefore held for nanoseconds at most,
 so threads rarely end up in contention.
-- The lock-free queue has increased memory allocation overhead: `jglockfree::Queue` allocates a `jglockfree::Node` for 
-each item in the queue, whereas `std::queue` amortizes allocation
 - On the ARM architecture specifically, compare-and-swap operations are implemented using LL/SC 
 (Load-Linked/Store-Conditional), which can spuriously fail under contention, causing more CAS retries.
 
@@ -144,16 +156,16 @@ Now we compare the performance of the two queues above with the SPSC queue.
 For the SPSC queue, the only valid configuration is a single producer and single consumer.
 We compare sustained throughput (measured in items per second) across all three implementations under this workload:
 
-| Queue                  | Throughput       | Time per item |
-|------------------------|------------------|---------------|
-| SPSC unsignalled       | 40.2M items/sec  | ~25 ns        |
-| Mutex                  | 35.0M items/sec  | ~29 ns        |
-| M&S lock-free          | 26.1M items/sec  | ~38 ns        |
-| SPSC (with signalling) | 16.3M items/sec  | ~61 ns        |
+| Queue                | Throughput       | Time per item |
+|----------------------|------------------|---------------|
+| M&S lock-free        | 39.0M items/sec  | ~26 ns        |
+| SPSC unsignalled     | 37.5M items/sec  | ~27 ns        |
+| Mutex                | 34.2M items/sec  | ~29 ns        |
+| SPSC with signalling | 22.3M items/sec  | ~45 ns        |
 
 
-The raw SPSC ring buffer achieves 40.2M items per second, outperforming both the mutex queue and the M&S
-lock-free queue. 
+The M&S queue and unsignalled SPSC queue are the best performing implementations, both beating the mutex queue on
+throughput.
 The SPSC queue's throughput is constrained by cross-core communication; even without signaling, each
 operation requires the other core to observe the updated index.
 The condition variable signaling overhead reduces throughput by roughly 63%.
@@ -164,14 +176,12 @@ At 8 threads (mixed enqueue/dequeue workload):
 
 | Percentile | Lock-Free | Mutex   |
 |------------|-----------|---------|
-| p50        | 3.5 µs    | 4.1 µs  |
-| p99        | 10 µs     | 44.5 µs |
-| p999       | 173 µs    | 120 µs  |
+| p50        | 3.7 µs    | 3.7 µs  |
+| p99        | 7.5 µs    | 49.9 µs |
+| p999       | 111 µs    | 121 µs  |
 
-The lock free queue's 99th percentile is 4.5 times lower because no thread can block another; contention results in CAS
+The lock-free queue's 99th percentile is 6.6 times lower because no thread can block another; contention results in CAS
 retries rather than blocking.
-The higher 999th percentile and maximum latency for the lock-free queue is due to the periodic hazard pointer scanning
-per-operation scanning and per-operation memory allocation.
 
 For latency-sensitive applications where p99 matters more than throughput, the lock-free
 queue is preferable despite its lower average performance.

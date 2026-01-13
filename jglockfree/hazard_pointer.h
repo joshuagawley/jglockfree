@@ -4,6 +4,7 @@
 #define JGLOCKFREE_HAZARD_POINTER_H_
 
 #include <mutex>
+#include <new>
 #include <ranges>
 #include <unordered_set>
 
@@ -29,8 +30,8 @@ class HazardPointer {
 
   constexpr auto Clear() noexcept -> void;
 
-  template <typename T>
-  constexpr static auto Retire(T *ptr) -> void;
+  template <typename T, typename Deleter>
+  constexpr static auto Retire(T *ptr, Deleter deleter) -> void;
 
  private:
   constexpr static auto Scan() -> void;
@@ -44,7 +45,7 @@ class HazardPointer {
   thread_local static inline std::vector<RetiredNode> retired_;
   static constexpr std::size_t kRetireThreshold = 2 * NumSlots;
 
-  std::atomic<void *> *slot_{nullptr};
+  alignas(std::hardware_destructive_interference_size) std::atomic<void *> *slot_{nullptr};
   std::size_t slot_index_{};
 };
 
@@ -105,9 +106,9 @@ constexpr bool HazardPointer<NumSlots>::IsProtected(T *ptr) noexcept {
 }
 
 template <std::size_t NumSlots>
-template <typename T>
-constexpr void HazardPointer<NumSlots>::Retire(T *ptr) {
-  retired_.emplace_back(ptr, [](void *p) { delete static_cast<T *>(p); });
+template <typename T, typename Deleter>
+constexpr void HazardPointer<NumSlots>::Retire(T *ptr, Deleter deleter) {
+  retired_.emplace_back(ptr, deleter);
   if (retired_.size() >= kRetireThreshold) {
     Scan();
   }
