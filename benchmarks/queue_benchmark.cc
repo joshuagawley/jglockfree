@@ -2,10 +2,18 @@
 #include <jglockfree/queue.h>
 #include <jglockfree/spsc.h>
 
-#include <chrono>
 #include <barrier>
+#include <chrono>
 
 #include "mutex_queue.h"
+
+class HazardPointerFixture : public benchmark::Fixture {
+ public:
+  // Use a smaller slot count to make scanning more frequent
+  static constexpr std::size_t kSlots = 64;
+  static constexpr std::size_t kRetireThreshold =
+      2 * kSlots;  // matches implementation
+};
 
 class QueueFixture : public benchmark::Fixture {
  public:
@@ -44,8 +52,28 @@ class SpscFixture : public benchmark::Fixture {
 };
 
 // clang-format off
+BENCHMARK_DEFINE_F(HazardPointerFixture, RetirementOverhead)(benchmark::State &state) {
+  // clang-format on
+  // This benchmark measures the cost of retire + periodic scan
+  // by enqueueing and dequeueing, which triggers retirement
+
+  jglockfree::Queue<int> queue;
+
+  // Pre-fill to avoid empty queue edge cases
+  for (int i = 0; i < 1000; ++i) {
+    queue.Enqueue(i);
+  }
+
+  for (auto _ : state) {
+    // Each dequeue retires a node, triggering Scan() periodically
+    queue.Enqueue(42);
+    benchmark::DoNotOptimize(queue.Dequeue());
+  }
+}
+
+// clang-format off
 BENCHMARK_DEFINE_F(QueueFixture, LockFreeEnqueue)(benchmark::State &state) {
-// clang-format on
+  // clang-format on
   for (auto _ : state) {
     lock_free_queue.Enqueue(42);
   }
@@ -53,7 +81,7 @@ BENCHMARK_DEFINE_F(QueueFixture, LockFreeEnqueue)(benchmark::State &state) {
 
 // clang-format off
 BENCHMARK_DEFINE_F(QueueFixture, MutexEnqueue)(benchmark::State &state) {
-// clang-format on
+  // clang-format on
   for (auto _ : state) {
     mutex_queue.Enqueue(42);
   }
@@ -61,7 +89,7 @@ BENCHMARK_DEFINE_F(QueueFixture, MutexEnqueue)(benchmark::State &state) {
 
 // clang-format off
 BENCHMARK_DEFINE_F(QueueFixture, LockFreeMixed)(benchmark::State &state) {
-// clang-format on
+  // clang-format on
   for (auto _ : state) {
     if (state.thread_index() % 2 == 0) {
       lock_free_queue.Enqueue(42);
@@ -73,7 +101,7 @@ BENCHMARK_DEFINE_F(QueueFixture, LockFreeMixed)(benchmark::State &state) {
 
 // clang-format off
 BENCHMARK_DEFINE_F(QueueFixture, MutexMixed)(benchmark::State &state) {
-// clang-format on
+  // clang-format on
   for (auto _ : state) {
     if (state.thread_index() % 2 == 0) {
       mutex_queue.Enqueue(42);
@@ -85,7 +113,7 @@ BENCHMARK_DEFINE_F(QueueFixture, MutexMixed)(benchmark::State &state) {
 
 // clang-format off
 BENCHMARK_DEFINE_F(QueueFixture, LockFreeThroughput)(benchmark::State &state) {
-// clang-format on
+  // clang-format on
   if (state.threads() != 2) {
     state.SkipWithError("Throughput benchmark requires exactly 2 threads");
     return;
@@ -114,7 +142,7 @@ BENCHMARK_DEFINE_F(QueueFixture, LockFreeThroughput)(benchmark::State &state) {
 
 // clang-format off
 BENCHMARK_DEFINE_F(QueueFixture, MutexThroughput)(benchmark::State &state) {
-// clang-format on
+  // clang-format on
   if (state.threads() != 2) {
     state.SkipWithError("Throughput benchmark requires exactly 2 threads");
     return;
@@ -143,7 +171,7 @@ BENCHMARK_DEFINE_F(QueueFixture, MutexThroughput)(benchmark::State &state) {
 
 // clang-format off
 BENCHMARK_DEFINE_F(QueueFixture, LockFreeLatencyDistribution)(benchmark::State &state) {
-// clang-format on
+  // clang-format on
   std::vector<int64_t> latencies;
   latencies.reserve(state.max_iterations);
 
@@ -157,7 +185,8 @@ BENCHMARK_DEFINE_F(QueueFixture, LockFreeLatencyDistribution)(benchmark::State &
 
     state.PauseTiming();
     auto t1 = std::chrono::high_resolution_clock::now();
-    auto ns = std::chrono::duration_cast<std::chrono::nanoseconds>(t1 - t0).count();
+    auto ns =
+        std::chrono::duration_cast<std::chrono::nanoseconds>(t1 - t0).count();
     latencies.push_back(ns);
     state.ResumeTiming();
   }
@@ -166,7 +195,8 @@ BENCHMARK_DEFINE_F(QueueFixture, LockFreeLatencyDistribution)(benchmark::State &
     std::ranges::sort(latencies);
 
     auto percentile = [&](double p) -> double {
-      const auto idx = static_cast<std::size_t>(p * static_cast<double>(latencies.size() - 1));
+      const auto idx = static_cast<std::size_t>(
+          p * static_cast<double>(latencies.size() - 1));
       return static_cast<double>(latencies[idx]);
     };
 
@@ -180,7 +210,7 @@ BENCHMARK_DEFINE_F(QueueFixture, LockFreeLatencyDistribution)(benchmark::State &
 
 // clang-format off
 BENCHMARK_DEFINE_F(QueueFixture, MutexLatencyDistribution)(benchmark::State &state) {
-// clang-format on
+  // clang-format on
   std::vector<int64_t> latencies;
   latencies.reserve(state.max_iterations);
 
@@ -194,7 +224,8 @@ BENCHMARK_DEFINE_F(QueueFixture, MutexLatencyDistribution)(benchmark::State &sta
 
     state.PauseTiming();
     auto t1 = std::chrono::high_resolution_clock::now();
-    auto ns = std::chrono::duration_cast<std::chrono::nanoseconds>(t1 - t0).count();
+    auto ns =
+        std::chrono::duration_cast<std::chrono::nanoseconds>(t1 - t0).count();
     latencies.push_back(ns);
     state.ResumeTiming();
   }
@@ -203,7 +234,8 @@ BENCHMARK_DEFINE_F(QueueFixture, MutexLatencyDistribution)(benchmark::State &sta
     std::ranges::sort(latencies);
 
     auto percentile = [&](double p) -> double {
-      auto idx = static_cast<std::size_t>(p * static_cast<double>(latencies.size() - 1));
+      auto idx = static_cast<std::size_t>(
+          p * static_cast<double>(latencies.size() - 1));
       return static_cast<double>(latencies[idx]);
     };
 
@@ -215,10 +247,9 @@ BENCHMARK_DEFINE_F(QueueFixture, MutexLatencyDistribution)(benchmark::State &sta
   }
 }
 
-
 // clang-format off
 BENCHMARK_DEFINE_F(SpscFixture, SpscTryPaired)(benchmark::State &state) {
-// clang-format on
+  // clang-format on
   // Ensure exactly 2 threads
   if (state.threads() != 2) {
     state.SkipWithError("SPSC requires exactly 2 threads");
@@ -242,7 +273,7 @@ BENCHMARK_DEFINE_F(SpscFixture, SpscTryPaired)(benchmark::State &state) {
 
 // clang-format off
 BENCHMARK_DEFINE_F(SpscFixture, SpscBlockingPaired)(benchmark::State &state) {
-// clang-format on
+  // clang-format on
   if (state.threads() != 2) {
     state.SkipWithError("SPSC requires exactly 2 threads");
     return;
@@ -272,7 +303,7 @@ BENCHMARK_DEFINE_F(SpscFixture, SpscBlockingPaired)(benchmark::State &state) {
 
 // clang-format off
 BENCHMARK_DEFINE_F(SpscFixture, SpscTryEnqueueOnly)(benchmark::State &state) {
-// clang-format on
+  // clang-format on
   if (state.threads() != 2) {
     state.SkipWithError("SPSC requires exactly 2 threads");
     return;
@@ -296,7 +327,7 @@ BENCHMARK_DEFINE_F(SpscFixture, SpscTryEnqueueOnly)(benchmark::State &state) {
 
 // clang-format off
 BENCHMARK_DEFINE_F(SpscFixture, SpscBlockingEnqueueOnly)(benchmark::State &state) {
-// clang-format on
+  // clang-format on
   if (state.threads() != 2) {
     state.SkipWithError("SPSC requires exactly 2 threads");
     return;
@@ -327,7 +358,7 @@ BENCHMARK_DEFINE_F(SpscFixture, SpscBlockingEnqueueOnly)(benchmark::State &state
 
 // clang-format off
 BENCHMARK_DEFINE_F(SpscFixture, SpscTryDequeueOnly)(benchmark::State &state) {
-// clang-format on
+  // clang-format on
   if (state.threads() != 2) {
     state.SkipWithError("SPSC requires exactly 2 threads");
     return;
@@ -355,7 +386,7 @@ BENCHMARK_DEFINE_F(SpscFixture, SpscTryDequeueOnly)(benchmark::State &state) {
 
 // clang-format off
 BENCHMARK_DEFINE_F(SpscFixture, SpscBlockingDequeueOnly)(benchmark::State &state) {
-// clang-format on
+  // clang-format on
   if (state.threads() != 2) {
     state.SkipWithError("SPSC requires exactly 2 threads");
     return;
@@ -390,7 +421,7 @@ BENCHMARK_DEFINE_F(SpscFixture, SpscBlockingDequeueOnly)(benchmark::State &state
 
 // clang-format off
 BENCHMARK_DEFINE_F(SpscFixture, SpscThroughput)(benchmark::State &state) {
-// clang-format on
+  // clang-format on
   if (state.threads() != 2) {
     state.SkipWithError("SPSC requires exactly 2 threads");
     return;
@@ -426,7 +457,7 @@ BENCHMARK_DEFINE_F(SpscFixture, SpscThroughput)(benchmark::State &state) {
 
 // clang-format off
 BENCHMARK_DEFINE_F(SpscFixture, SpscThroughputInternal)(benchmark::State &state) {
-// clang-format on
+  // clang-format on
   if (state.threads() != 2) {
     state.SkipWithError("SPSC requires exactly 2 threads");
     return;
@@ -454,6 +485,12 @@ BENCHMARK_DEFINE_F(SpscFixture, SpscThroughputInternal)(benchmark::State &state)
 
   state.SetItemsProcessed(state.iterations() * kItemsPerIteration);
 }
+
+BENCHMARK_REGISTER_F(HazardPointerFixture, RetirementOverhead)
+    ->Threads(1)
+    ->Threads(2)
+    ->Threads(4)
+    ->Threads(8);
 
 BENCHMARK_REGISTER_F(QueueFixture, LockFreeEnqueue)
     ->Threads(1)

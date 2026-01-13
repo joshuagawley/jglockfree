@@ -116,15 +116,17 @@ constexpr void HazardPointer<NumSlots>::Retire(T *ptr) {
 template <std::size_t NumSlots>
 constexpr void HazardPointer<NumSlots>::Scan() {
   const auto count = next_slot_.load(std::memory_order_acquire);
-  const auto loads = std::views::iota(std::size_t{0}, count) |
-                     std::views::transform([](auto i) {
-                       return slots_[i].load(std::memory_order_acquire);
-                     });
-  const std::unordered_set<void *> protected_ptrs(loads.begin(), loads.end());
 
-  std::erase_if(retired_, [&protected_ptrs](const RetiredNode &node) {
-    if (protected_ptrs.contains(node.ptr)) {
-      return false;
+  std::array<void *, NumSlots> protected_ptrs{};
+  for (std::size_t i = 0; i < count; ++i) {
+    protected_ptrs[i] = slots_[i].load(std::memory_order_acquire);
+  }
+
+  std::erase_if(retired_, [&protected_ptrs, count](const RetiredNode &node) {
+    for (std::size_t i = 0; i < count; ++i) {
+      if (protected_ptrs[i] == node.ptr) {
+        return false;
+      }
     }
     node.deleter(node.ptr);
     return true;
