@@ -1,4 +1,4 @@
-# An implementation of a lock-free queue in modern C++
+# jglockfree - lock-free data structures in modern C++
 
 ![CI](https://github.com/joshuagawley/jglockfree/actions/workflows/ci.yml/badge.svg)
 
