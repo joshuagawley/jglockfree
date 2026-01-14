@@ -3,7 +3,7 @@
 ![CI](https://github.com/joshuagawley/jglockfree/actions/workflows/ci.yml/badge.svg)
 
 This library contains minimal implementations of 
-- the lock-free queue, as described in [Michael and Scott (1996)](https://www.cs.rochester.edu/~scott/papers/1996_PODC_queues.pdf)
+- a lock-free queue, as described in [Michael and Scott (1996)](https://www.cs.rochester.edu/~scott/papers/1996_PODC_queues.pdf)
 - hazard pointers, as described in [Michael (2004)](https://www.cs.otago.ac.nz/cosc440/readings/hazard-pointers.pdf)
 - an SPSC lock-free queue using a ring buffer, as described in The Art of Multiprocessor Programming by Herlihy 
 and Shavit (2008).
