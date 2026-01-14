@@ -24,6 +24,7 @@ To clone the repository:
 ```bash
 git clone https://github.com/joshuagawley/jglockfree.git
 cd jglockfree
+# if you want to use bundled versions of GoogleTest and GoogleBenchmark
 git submodule update --init --recursive
 ```
 
