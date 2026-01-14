@@ -10,26 +10,73 @@
 
 namespace jglockfree {
 
+/**
+ * @brief
+ * @details
+ */
 struct RetiredNode {
-  void *ptr;
-  void (*deleter)(void *);
+  void *ptr;              ///< Pointer to the retired object.
+  void (*deleter)(void *);  ///< Deleter function to reclaim the object.
 };
 
+/**
+ * @brief
+ * @details
+ *
+ * @tparam NumSlots The maximum number of hazard pointer slots available.
+ */
 template <std::size_t NumSlots = 128>
 class HazardPointer {
  public:
+  /**
+   * @brief
+   * @details
+   *
+   * @throws std::runtime_error if no hazard pointer slots are available.
+   */
   HazardPointer();
+
   ~HazardPointer() noexcept;
 
+  /**
+   * @brief
+   * @details
+   *
+   * @tparam T The type of the pointer to protect.
+   * @param source The atomic pointer to protect.
+   * @return The protected pointer value.
+   */
   template <typename T>
   [[nodiscard]] constexpr auto Protect(std::atomic<T *> &source) noexcept
       -> T *;
 
+  /**
+   * @brief
+   * @details
+   *
+   * @tparam T The type of the pointer to check.
+   * @param ptr The pointer to check for protection.
+   * @return true if the pointer is currently protected by any hazard pointer,
+   *         false otherwise.
+   */
   template <typename T>
   [[nodiscard]] static constexpr auto IsProtected(T *ptr) noexcept -> bool;
 
+  /**
+   * @brief
+   * @details
+   */
   constexpr auto Clear() noexcept -> void;
 
+  /**
+   * @brief
+   * @details
+   *
+   * @tparam T The type of the pointer to retire.
+   * @tparam Deleter The type of the deleter function.
+   * @param ptr The pointer to retire.
+   * @param deleter The deleter function to reclaim the object.
+   */
   template <typename T, typename Deleter>
   constexpr static auto Retire(T *ptr, Deleter deleter) -> void;
 

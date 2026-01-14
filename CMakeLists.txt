@@ -13,6 +13,10 @@ set_project_settings(project_settings WARNING_AS_ERRORS)
 
 add_subdirectory(jglockfree)
 
+if (BUILD_DOCS)
+    include(Doxygen)
+endif ()
+
 include(CTest)
 if (BUILD_TESTING)
     if (USE_SYSTEM_GOOGLETEST)
