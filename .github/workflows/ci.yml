@@ -19,13 +19,14 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y cmake ninja-build libgtest-dev
+          sudo apt-get install -y cmake ninja-build
 
       - name: Configure
         run: |
           cmake -B build -G Ninja \
             -DCMAKE_BUILD_TYPE=Debug \
             -DBUILD_TESTING=ON \
+            -DUSE_SYSTEM_GOOGLETEST=OFF \
             -DENABLE_${{ matrix.sanitizer == 'asan' && 'ASAN' || 'TSAN' }}=ON
 
       - name: Build
@@ -66,7 +67,8 @@ jobs:
           cmake -B build -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
             -DBUILD_TESTING=OFF \
-            -DRUN_BENCHMARKS=ON
+            -DBUILD_BENCHMARKS=ON \
+            -DUSE_SYSTEM_GOOGLEBENCHMARK=ON
 
       - name: Build
         run: cmake --build build

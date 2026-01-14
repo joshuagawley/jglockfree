@@ -1,7 +1,9 @@
 option(WARNINGS_AS_ERRORS "Treat compiler warnings as errors" OFF)
 option(ENABLE_ASAN "Enable AddressSanitizer" OFF)
 option(ENABLE_TSAN "Enable ThreadSanitizer" OFF)
-option(RUN_BENCHMARKS "Run benchmarks" OFF)
+option(BUILD_BENCHMARKS "Build benchmarks" ON)
+option(USE_SYSTEM_GOOGLETEST "Use system GoogleTest" OFF)
+option(USE_SYSTEM_GOOGLEBENCHMARK "Use system GoogleBenchmark" OFF)
 
 # Export compile commands used for custom targets
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
