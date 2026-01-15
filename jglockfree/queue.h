@@ -3,17 +3,17 @@
 #ifndef JGLOCKFREE_INCLUDE_QUEUE_H_
 #define JGLOCKFREE_INCLUDE_QUEUE_H_
 
-#include <atomic>
-#include <optional>
-
 #include <jglockfree/config.h>
 #include <jglockfree/hazard_pointer.h>
+
+#include <atomic>
+#include <optional>
 
 namespace jglockfree {
 
 template <typename Node, typename Traits = DefaultTraits>
 class FreeList {
-public:
+ public:
   FreeList() = default;
   ~FreeList() noexcept;
 
@@ -26,7 +26,7 @@ public:
   auto Push(Node *node) -> void;
   auto Pop() -> Node *;
 
-private:
+ private:
   alignas(Traits::kCacheLineSize) std::atomic<Node *> head_{nullptr};
 };
 
@@ -45,9 +45,8 @@ void FreeList<Node, Traits>::Push(Node *node) {
   auto old_head = head_.load(std::memory_order_relaxed);
   do {
     node->next.store(old_head, std::memory_order_relaxed);
-  } while (not head_.compare_exchange_weak(old_head, node,
-                                           std::memory_order_release,
-                                           std::memory_order_relaxed));
+  } while (not head_.compare_exchange_weak(
+      old_head, node, std::memory_order_release, std::memory_order_relaxed));
 }
 
 template <typename Node, typename Traits>
@@ -60,7 +59,8 @@ Node *FreeList<Node, Traits>::Pop() {
     } else {
       next = old_head->next.load(std::memory_order_relaxed);
     }
-  } while (not head_.compare_exchange_weak(old_head, next, std::memory_order_release, std::memory_order_relaxed));
+  } while (not head_.compare_exchange_weak(
+      old_head, next, std::memory_order_release, std::memory_order_relaxed));
   return old_head;
 }
 
@@ -98,7 +98,8 @@ class Queue {
 };
 
 template <typename T, typename Traits>
-thread_local FreeList<typename Queue<T, Traits>::Node, Traits> Queue<T, Traits>::free_list_{};
+thread_local FreeList<typename Queue<T, Traits>::Node, Traits>
+    Queue<T, Traits>::free_list_{};
 
 template <typename T, typename Traits>
 Queue<T, Traits>::Queue() {
@@ -126,7 +127,7 @@ void Queue<T, Traits>::Enqueue(T value) {
     auto *old_tail_ptr = hp_tail.Protect(tail_);
     auto *next = old_tail_ptr->next.load(std::memory_order_acquire);
 
-    if ( old_tail_ptr == tail_.load(std::memory_order_relaxed)) [[likely]] {
+    if (old_tail_ptr == tail_.load(std::memory_order_relaxed)) [[likely]] {
       if (next == nullptr) [[likely]] {
         // Try to link new node
         if (old_tail_ptr->next.compare_exchange_weak(
@@ -186,7 +187,7 @@ std::optional<T> Queue<T, Traits>::Dequeue() noexcept {
 
 template <typename T, typename Traits>
 Queue<T, Traits>::Node *Queue<T, Traits>::AllocateNode(T value) {
- auto *node = free_list_.Pop();
+  auto *node = free_list_.Pop();
   if (node != nullptr) {
     try {
       std::construct_at(&node->value, std::move(value));

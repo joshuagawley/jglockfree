@@ -37,16 +37,11 @@ class SpscQueue {
   [[nodiscard]] constexpr auto TryDequeueUnsignalled() -> std::optional<T>;
 
  private:
-  alignas(Traits::kCacheLineSize)
-      std::array<T, NumSlots + 1> slots_;
-  alignas(Traits::kCacheLineSize)
-      std::atomic<std::size_t> head_;
-  alignas(Traits::kCacheLineSize)
-      std::atomic<std::size_t> tail_;
-  alignas(Traits::kCacheLineSize) std::condition_variable
-      not_empty_;
-  alignas(Traits::kCacheLineSize)
-      std::condition_variable not_full_;
+  alignas(Traits::kCacheLineSize) std::array<T, NumSlots + 1> slots_;
+  alignas(Traits::kCacheLineSize) std::atomic<std::size_t> head_;
+  alignas(Traits::kCacheLineSize) std::atomic<std::size_t> tail_;
+  alignas(Traits::kCacheLineSize) std::condition_variable not_empty_;
+  alignas(Traits::kCacheLineSize) std::condition_variable not_full_;
   alignas(Traits::kCacheLineSize) std::mutex mutex_;
 };
 
@@ -119,7 +114,8 @@ void SpscQueue<T, NumSlots, Traits>::Enqueue(T value) {
 }
 
 template <typename T, std::size_t NumSlots, typename Traits>
-constexpr std::optional<T> SpscQueue<T, NumSlots, Traits>::TryDequeueUnsignalled() {
+constexpr std::optional<T>
+SpscQueue<T, NumSlots, Traits>::TryDequeueUnsignalled() {
   const auto head = head_.load(std::memory_order_relaxed);
   const auto tail = tail_.load(std::memory_order_acquire);
 
