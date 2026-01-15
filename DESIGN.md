@@ -63,8 +63,22 @@ loads. On ARM, however, such a reordering is permitted. If the reload comes befo
 the hazard registry, see nothing, and delete the node before we reload, causing us to dereference freed memory.
 
 ### Implementation notes
-The `Scan()` function uses a stack-allocated array with linear search rather than `std::unordered_set`.
-For the default 128 slots, this is approximately 25% faster due to eliminated heap allocations and better cache locality.
+The `Scan()` function uses a stack-allocated array rather than `std::unordered_set` to eliminate heap allocations in the
+hot path and because an array has better cache locality than a set.
+In addition, we use compile time branching to choose between sorting and then binary search for hazard pointers with a large
+number of slots (more than 256), or linear search for fewer slots (256 or less).
+For the default 128 slots, this is approximately 25% faster due to eliminated heap allocations and better cache locality,
+and the latency growth as we increase the number of threads is similar with 256 slots and 1024 slots:
+
+| Threads | 256 Slots | 1024 Slots |
+|---------|-----------|------------|
+| 1       | 39.8 ns   | 41.6 ns    |
+| 2       | 78.7 ns   | 80.8 ns    |
+| 4       | 322 ns    | 276 ns     |
+| 8       | 815 ns    | 781 ns     |
+
+We also align each hazard pointer slot to a cache line to avoid false sharing; this improves 
+latency by 7%.
 
 ## Object pooling
 Now we move on to discuss optimizations specific to the M&S queue.

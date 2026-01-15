@@ -1,4 +1,5 @@
 #include <benchmark/benchmark.h>
+#include <jglockfree/hazard_pointer.h>
 #include <jglockfree/queue.h>
 #include <jglockfree/spsc.h>
 
@@ -14,6 +15,122 @@ class HazardPointerFixture : public benchmark::Fixture {
   static constexpr std::size_t kRetireThreshold =
       2 * kSlots;  // matches implementation
 };
+
+// ============================================================================
+// Hazard Pointer Slot Hammering Benchmarks (256 and 1024 slots)
+//
+// Tests slot acquisition contention and scan algorithm performance.
+// 256 slots uses linear search, 1024 slots uses sort + binary search.
+// ============================================================================
+
+struct BenchNode {
+  int value;
+};
+
+template <std::size_t NumSlots>
+class HazardSlotFixture : public benchmark::Fixture {};
+
+using HazardSlot256 = HazardSlotFixture<256>;
+using HazardSlot1024 = HazardSlotFixture<1024>;
+
+// Slot acquisition/release contention
+// clang-format off
+BENCHMARK_TEMPLATE_DEFINE_F(HazardSlotFixture, SlotAcquireRelease256, 256)(benchmark::State &state) {
+  // clang-format on
+  for (auto _ : state) {
+    jglockfree::HazardPointerN<256> hp;
+    benchmark::DoNotOptimize(&hp);
+  }
+}
+
+// clang-format off
+BENCHMARK_TEMPLATE_DEFINE_F(HazardSlotFixture, SlotAcquireRelease1024, 1024)(benchmark::State &state) {
+  // clang-format on
+  for (auto _ : state) {
+    jglockfree::HazardPointerN<1024> hp;
+    benchmark::DoNotOptimize(&hp);
+  }
+}
+
+// Full slot hammering: acquire, protect, clear, release
+// clang-format off
+BENCHMARK_TEMPLATE_DEFINE_F(HazardSlotFixture, SlotHammer256, 256)(benchmark::State &state) {
+  // clang-format on
+  std::atomic<BenchNode *> shared_node{new BenchNode{42}};
+
+  for (auto _ : state) {
+    jglockfree::HazardPointerN<256> hp;
+    auto *ptr = hp.Protect(shared_node);
+    benchmark::DoNotOptimize(ptr);
+    hp.Clear();
+  }
+
+  if (state.thread_index() == 0) {
+    delete shared_node.load();
+  }
+}
+
+// clang-format off
+BENCHMARK_TEMPLATE_DEFINE_F(HazardSlotFixture, SlotHammer1024, 1024)(benchmark::State &state) {
+  // clang-format on
+  std::atomic<BenchNode *> shared_node{new BenchNode{42}};
+
+  for (auto _ : state) {
+    jglockfree::HazardPointerN<1024> hp;
+    auto *ptr = hp.Protect(shared_node);
+    benchmark::DoNotOptimize(ptr);
+    hp.Clear();
+  }
+
+  if (state.thread_index() == 0) {
+    delete shared_node.load();
+  }
+}
+
+// Mixed workload: protect + retire (triggers scan periodically)
+// clang-format off
+BENCHMARK_TEMPLATE_DEFINE_F(HazardSlotFixture, MixedWorkload256, 256)(benchmark::State &state) {
+  // clang-format on
+  std::atomic<BenchNode *> shared_node{new BenchNode{42}};
+
+  for (auto _ : state) {
+    jglockfree::HazardPointerN<256> hp;
+    auto *ptr = hp.Protect(shared_node);
+    benchmark::DoNotOptimize(ptr->value);
+    hp.Clear();
+
+    auto *to_retire = new BenchNode{state.thread_index()};
+    jglockfree::HazardPointerN<256>::Retire(to_retire, [](void *p) {
+      delete static_cast<BenchNode *>(p);
+    });
+  }
+
+  if (state.thread_index() == 0) {
+    delete shared_node.load();
+  }
+}
+
+// clang-format off
+BENCHMARK_TEMPLATE_DEFINE_F(HazardSlotFixture, MixedWorkload1024, 1024)(benchmark::State &state) {
+  // clang-format on
+  std::atomic<BenchNode *> shared_node{new BenchNode{42}};
+
+  for (auto _ : state) {
+    jglockfree::HazardPointerN<1024> hp;
+    auto *ptr = hp.Protect(shared_node);
+    benchmark::DoNotOptimize(ptr->value);
+    hp.Clear();
+
+    auto *to_retire = new BenchNode{state.thread_index()};
+    jglockfree::HazardPointerN<1024>::Retire(to_retire, [](void *p) {
+      delete static_cast<BenchNode *>(p);
+    });
+  }
+
+  if (state.thread_index() == 0) {
+    delete shared_node.load();
+  }
+}
 
 class QueueFixture : public benchmark::Fixture {
  public:
@@ -485,6 +602,48 @@ BENCHMARK_DEFINE_F(SpscFixture, SpscThroughputInternal)(benchmark::State &state)
 
   state.SetItemsProcessed(state.iterations() * kItemsPerIteration);
 }
+
+// Hazard pointer slot hammering (256 slots - linear search)
+BENCHMARK_REGISTER_F(HazardSlotFixture, SlotAcquireRelease256)
+    ->Threads(1)
+    ->Threads(2)
+    ->Threads(4)
+    ->Threads(8)
+    ->Threads(16)
+    ->Threads(32);
+BENCHMARK_REGISTER_F(HazardSlotFixture, SlotHammer256)
+    ->Threads(1)
+    ->Threads(2)
+    ->Threads(4)
+    ->Threads(8)
+    ->Threads(16)
+    ->Threads(32);
+BENCHMARK_REGISTER_F(HazardSlotFixture, MixedWorkload256)
+    ->Threads(1)
+    ->Threads(2)
+    ->Threads(4)
+    ->Threads(8);
+
+// Hazard pointer slot hammering (1024 slots - binary search)
+BENCHMARK_REGISTER_F(HazardSlotFixture, SlotAcquireRelease1024)
+    ->Threads(1)
+    ->Threads(2)
+    ->Threads(4)
+    ->Threads(8)
+    ->Threads(16)
+    ->Threads(32);
+BENCHMARK_REGISTER_F(HazardSlotFixture, SlotHammer1024)
+    ->Threads(1)
+    ->Threads(2)
+    ->Threads(4)
+    ->Threads(8)
+    ->Threads(16)
+    ->Threads(32);
+BENCHMARK_REGISTER_F(HazardSlotFixture, MixedWorkload1024)
+    ->Threads(1)
+    ->Threads(2)
+    ->Threads(4)
+    ->Threads(8);
 
 BENCHMARK_REGISTER_F(HazardPointerFixture, RetirementOverhead)
     ->Threads(1)

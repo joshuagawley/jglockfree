@@ -3,6 +3,7 @@
 #ifndef JGLOCKFREE_HAZARD_POINTER_H_
 #define JGLOCKFREE_HAZARD_POINTER_H_
 
+#include <algorithm>
 #include <mutex>
 
 #include <jglockfree/config.h>
@@ -87,7 +88,13 @@ class HazardPointer {
  private:
   constexpr static auto Scan() -> void;
 
-  static inline std::array<std::atomic<void *>, NumSlots> slots_{};
+  struct HazardPointerSlot {
+    alignas(Traits::kCacheLineSize) std::atomic<void *> ptr;
+  };
+  static_assert(sizeof(HazardPointerSlot) == std::hardware_destructive_interference_size,
+              "HazardSlot is not padded to cache line size!");
+
+  static inline std::array<HazardPointerSlot, NumSlots> slots_{};
   static inline std::atomic<std::size_t> next_slot_{0};
 
   static inline std::mutex free_list_guard_{};
@@ -114,7 +121,7 @@ HazardPointer<Traits, NumSlots>::HazardPointer() {
       }
     }
   }
-  slot_ = &slots_[slot_index_];
+  slot_ = &slots_[slot_index_].ptr;
 }
 
 template <typename Traits, std::size_t NumSlots>
@@ -148,7 +155,7 @@ template <typename T>
 constexpr bool HazardPointer<Traits, NumSlots>::IsProtected(T *ptr) noexcept {
   const auto count = next_slot_.load(std::memory_order_acquire);
   for (auto i = std::size_t{0}; i < count; ++i) {
-    if (slots_[i].load(std::memory_order_acquire) == ptr) {
+    if (slots_[i].ptr.load(std::memory_order_acquire) == ptr) {
       return true;
     }
   }
@@ -171,17 +178,31 @@ constexpr void HazardPointer<Traits, NumSlots>::Scan() {
 
   std::array<void *, NumSlots> protected_ptrs{};
   for (std::size_t i = 0; i < count; ++i) {
-    protected_ptrs[i] = slots_[i].load(std::memory_order_acquire);
+    protected_ptrs[i] = slots_[i].ptr.load(std::memory_order_acquire);
+  }
+
+  // for large N (> 256), use sort + binary search
+  // for small N (<= 256), use linear search
+  if constexpr (NumSlots > 256) {
+    std::ranges::sort(protected_ptrs);
   }
 
   std::erase_if(retired_, [&protected_ptrs, count](const RetiredNode &node) {
-    for (std::size_t i = 0; i < count; ++i) {
-      if (protected_ptrs[i] == node.ptr) {
+    if constexpr (NumSlots <= 256) {
+      for (std::size_t i = 0; i < count; ++i) {
+        if (protected_ptrs[i] == node.ptr) {
+          return false;
+        }
+      }
+      node.deleter(node.ptr);
+      return true;
+    } else {
+      if (std::binary_search(protected_ptrs.begin(), protected_ptrs.end(), node.ptr)) {
         return false;
       }
+      node.deleter(node.ptr);
+      return true;
     }
-    node.deleter(node.ptr);
-    return true;
   });
 }
 
