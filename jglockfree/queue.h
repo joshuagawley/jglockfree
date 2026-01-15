@@ -32,9 +32,9 @@ class FreeList {
 
 template <typename Node, typename Traits>
 FreeList<Node, Traits>::~FreeList() noexcept {
-  auto current = head_.load(std::memory_order_relaxed);
+  Node *current = head_.load(std::memory_order_relaxed);
   while (current != nullptr) {
-    auto next = current->next.load(std::memory_order_relaxed);
+    Node *next = current->next.load(std::memory_order_relaxed);
     delete current;
     current = next;
   }
@@ -51,8 +51,8 @@ void FreeList<Node, Traits>::Push(Node *node) {
 
 template <typename Node, typename Traits>
 Node *FreeList<Node, Traits>::Pop() {
-  auto old_head = head_.load(std::memory_order_relaxed);
-  Node *next{nullptr};
+  Node *old_head = head_.load(std::memory_order_relaxed);
+  Node *next = nullptr;
   do {
     if (old_head == nullptr) {
       return nullptr;
@@ -121,11 +121,11 @@ Queue<T, Traits>::~Queue() noexcept {
 template <typename T, typename Traits>
 void Queue<T, Traits>::Enqueue(T value) {
   thread_local HazardPointer hp_tail;
-  auto node = AllocateNode(std::move(value));
+  Node *node = AllocateNode(std::move(value));
 
   while (true) {
-    auto *old_tail_ptr = hp_tail.Protect(tail_);
-    auto *next = old_tail_ptr->next.load(std::memory_order_acquire);
+    Node *old_tail_ptr = hp_tail.Protect(tail_);
+    Node *next = old_tail_ptr->next.load(std::memory_order_acquire);
 
     if (old_tail_ptr == tail_.load(std::memory_order_relaxed)) [[likely]] {
       if (next == nullptr) [[likely]] {
@@ -134,9 +134,11 @@ void Queue<T, Traits>::Enqueue(T value) {
                 next, node, std::memory_order_release,
                 std::memory_order_relaxed)) [[likely]] {
           // Try to swing tail forward
-          tail_.compare_exchange_weak(old_tail_ptr, node,
-                                      std::memory_order_release,
-                                      std::memory_order_relaxed);
+          tail_.
+
+              compare_exchange_weak(old_tail_ptr, node,
+                                    std::memory_order_release,
+                                    std::memory_order_relaxed);
           hp_tail.Clear();
           return;
         }
@@ -156,9 +158,9 @@ std::optional<T> Queue<T, Traits>::Dequeue() noexcept {
   thread_local HazardPointer hp_next;
 
   while (true) {
-    auto *old_head_ptr = hp_head.Protect(head_);
-    auto *old_tail_ptr = tail_.load(std::memory_order_relaxed);
-    auto *next_ptr = hp_next.Protect(old_head_ptr->next);
+    Node *old_head_ptr = hp_head.Protect(head_);
+    Node *old_tail_ptr = tail_.load(std::memory_order_relaxed);
+    Node *next_ptr = hp_next.Protect(old_head_ptr->next);
 
     if (old_head_ptr == head_.load(std::memory_order_acquire)) [[likely]] {
       if (old_head_ptr == old_tail_ptr) [[unlikely]] {
@@ -174,7 +176,7 @@ std::optional<T> Queue<T, Traits>::Dequeue() noexcept {
         if (head_.compare_exchange_weak(old_head_ptr, next_ptr,
                                         std::memory_order_release,
                                         std::memory_order_relaxed)) [[likely]] {
-          auto value = std::move(next_ptr->value);
+          std::optional<T> value = std::move(next_ptr->value);
           hp_head.Retire(old_head_ptr, RecycleNode);
           hp_head.Clear();
           hp_next.Clear();
@@ -187,7 +189,7 @@ std::optional<T> Queue<T, Traits>::Dequeue() noexcept {
 
 template <typename T, typename Traits>
 Queue<T, Traits>::Node *Queue<T, Traits>::AllocateNode(T value) {
-  auto *node = free_list_.Pop();
+  Node *node = free_list_.Pop();
   if (node != nullptr) {
     try {
       std::construct_at(&node->value, std::move(value));

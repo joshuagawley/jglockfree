@@ -83,9 +83,9 @@ template <typename T>
 constexpr T *HazardPointer<Traits, NumSlots>::Protect(
     std::atomic<T *> &source) noexcept {
   while (true) {
-    const auto ptr = source.load(std::memory_order_acquire);
+    T *ptr = source.load(std::memory_order_acquire);
     slot_->store(ptr, std::memory_order_seq_cst);
-    const auto current = source.load(std::memory_order_seq_cst);
+    T *current = source.load(std::memory_order_seq_cst);
     if (ptr == current) {
       return ptr;
     }
@@ -100,8 +100,8 @@ constexpr void HazardPointer<Traits, NumSlots>::Clear() noexcept {
 template <typename Traits, std::size_t NumSlots>
 template <typename T>
 constexpr bool HazardPointer<Traits, NumSlots>::IsProtected(T *ptr) noexcept {
-  const auto count = next_slot_.load(std::memory_order_acquire);
-  for (auto i = std::size_t{0}; i < count; ++i) {
+  const std::size_t count = next_slot_.load(std::memory_order_acquire);
+  for (std::size_t i = 0; i < count; ++i) {
     if (slots_[i].ptr.load(std::memory_order_acquire) == ptr) {
       return true;
     }
@@ -122,7 +122,7 @@ constexpr void HazardPointer<Traits, NumSlots>::Retire(T *ptr,
 
 template <typename Traits, std::size_t NumSlots>
 constexpr void HazardPointer<Traits, NumSlots>::Scan() {
-  const auto count = next_slot_.load(std::memory_order_acquire);
+  const std::size_t count = next_slot_.load(std::memory_order_acquire);
 
   std::array<void *, NumSlots> protected_ptrs{};
   for (std::size_t i = 0; i < count; ++i) {
