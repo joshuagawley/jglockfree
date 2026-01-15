@@ -139,6 +139,13 @@ success.
 This roughly halves throughput compared to the raw lock-free path.
 For maximum performance when blocking is not needed, use `TryEnqueueUnsignalled()` and `TryDequeueUnsignalled()`.
 
+### Uninitalized storage
+Instead of using a straight array of nodes, the SPSC uses an array of `Slots` which are a union of a value and a
+dummy variable, analogous to `MaybeUninit<T>` in Rust.
+This means that instead of constructing all nodes at startup, we construct nodes lazily when they are enqueued.
+Therefore, we can store non-default-constructible and move-only types in the queue, and it drops the startup latency for
+large objects from thousands of nanoseconds to tens of nanoseconds (see the SpscStartupLatencyString benchmark).
+
 ## Benchmarks
 The following results are wall-clock times per operation, recorded on an Apple M1 processor.
 
@@ -147,10 +154,10 @@ We first compare the performance of the lock-free queue with the mutex-based que
 
 | Threads | Lock-Free Enqueue | Mutex Enqueue | Lock-Free Mixed | Mutex Mixed |
 |---------|-------------------|---------------|-----------------|-------------|
-| 1       | 13.4 ns           | 9.55 ns       | 13.3 ns         | 9.97 ns     |
-| 2       | 80.9 ns           | 34.1 ns       | 25.5 ns         | 30.5 ns     |
-| 4       | 283 ns            | 92.9 ns       | 118 ns          | 82.8 ns     |
-| 8       | 1593 ns           | 270 ns        | 548 ns          | 250 ns      |
+| 1       | 17.5 ns           | 9.60 ns       | 17.6 ns         | 9.90 ns     |
+| 2       | 80.5 ns           | 34.6 ns       | 32.0 ns         | 35.7 ns     |
+| 4       | 284 ns            | 88.0 ns       | 103 ns          | 107 ns      |
+| 8       | 1305 ns           | 276 ns        | 415 ns          | 269 ns      |
 
 The lock-free queue is generally less performant than the mutex-based queue. This is due to the following reasons:
 - The lock-free queue includes hazard pointer overhead: sequentially consistent memory ordering on every protect
@@ -174,30 +181,28 @@ We compare sustained throughput (measured in items per second) across all three 
 
 | Queue                | Throughput       | Time per item |
 |----------------------|------------------|---------------|
-| M&S lock-free        | 39.0M items/sec  | ~26 ns        |
-| SPSC unsignalled     | 37.5M items/sec  | ~27 ns        |
-| Mutex                | 34.2M items/sec  | ~29 ns        |
-| SPSC with signalling | 22.3M items/sec  | ~45 ns        |
+| SPSC unsignalled     | 39.6M items/sec  | ~25 ns        |
+| M&S lock-free        | 36.5M items/sec  | ~27 ns        |
+| Mutex                | 34.6M items/sec  | ~29 ns        |
+| SPSC with signalling | 20.1M items/sec  | ~50 ns        |
 
 
 The M&S queue and unsignalled SPSC queue are the best performing implementations, both beating the mutex queue on
 throughput.
-The SPSC queue's throughput is constrained by cross-core communication; even without signaling, each
-operation requires the other core to observe the updated index.
-The condition variable signaling overhead reduces throughput by roughly 63%.
+The condition variable signaling overhead reduces throughput by roughly 50%.
 
 ### Tail latency
 While the lock-free queue has lower throughput than the mutex queue, it provides better tail latency under contention.
 At 8 threads (mixed enqueue/dequeue workload):
 
-| Percentile | Lock-Free | Mutex   |
-|------------|-----------|---------|
-| p50        | 3.7 µs    | 3.7 µs  |
-| p99        | 7.5 µs    | 49.9 µs |
-| p999       | 111 µs    | 121 µs  |
+| Percentile | Lock-Free | Mutex    |
+|------------|-----------|----------|
+| p50        | 4.1 µs    | 3.6 µs   |
+| p99        | 7.8 µs    | 54.3 µs  |
+| p999       | 70.8 µs   | 184.5 µs |
 
-The lock-free queue's 99th percentile latency is 6.6 times lower because no thread can block another; contention results in CAS
-retries rather than blocking.
+The lock-free queue's 99th percentile latency is 7 times lower because no thread can block another; 
+contention results in CAS retries rather than blocking.
 
 For latency-sensitive applications where 99th percentile tail latency matters more than throughput, the lock-free
 queue is preferable.

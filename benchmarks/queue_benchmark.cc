@@ -5,6 +5,7 @@
 
 #include <barrier>
 #include <chrono>
+#include <string>
 
 #include "mutex_queue.h"
 
@@ -604,6 +605,30 @@ BENCHMARK_DEFINE_F(SpscFixture, SpscThroughputInternal)(benchmark::State &state)
 
   state.SetItemsProcessed(state.iterations() * kItemsPerIteration);
 }
+
+// ============================================================================
+// SPSC Startup Latency Benchmark (Construction Cost)
+//
+// Measures the time to construct a SpscQueue object. This proves the benefit
+// of using std::construct_at / union to avoid default-constructing all slots.
+// With std::string (which has non-trivial construction), the difference
+// between eager construction (old) and lazy construction (new) is dramatic.
+//
+// OLD CODE: Would call std::string() 10,000 times. (Slow)
+// NEW CODE: Allocates raw memory only. (Fast)
+// ============================================================================
+
+static void SpscStartupLatencyString(benchmark::State &state) {
+  for (auto _ : state) {
+    // This line is what we are testing: Queue object construction time.
+    jglockfree::SpscQueue<std::string, 10000> queue;
+
+    // Prevent compiler from deleting the queue entirely
+    benchmark::DoNotOptimize(&queue);
+  }
+}
+
+BENCHMARK(SpscStartupLatencyString)->Unit(benchmark::kNanosecond);
 
 // Hazard pointer slot hammering (256 slots - linear search)
 BENCHMARK_REGISTER_F(HazardSlotFixture, SlotAcquireRelease256)
