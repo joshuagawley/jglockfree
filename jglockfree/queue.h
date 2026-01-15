@@ -11,12 +11,6 @@
 
 namespace jglockfree {
 
-/**
- * @brief
- * @details
- *
- * @tparam Node The type of nodes stored in the free list.
- */
 template <typename Node, typename Traits = DefaultTraits>
 class FreeList {
 public:
@@ -29,21 +23,9 @@ public:
   FreeList(FreeList &&) = delete;
   FreeList &operator=(FreeList &&) = delete;
 
-  /**
-   * @brief
-   * @details
-   *
-   * @param node The node to push onto the free list.
-   */
   auto Push(Node *node) -> void;
-
-  /**
-   * @brief
-   * @details
-   *
-   * @return A pointer to the popped node, or nullptr if the free list is empty.
-   */
   auto Pop() -> Node *;
+
 private:
   alignas(Traits::kCacheLineSize) std::atomic<Node *> head_{nullptr};
 };
@@ -82,12 +64,6 @@ Node *FreeList<Node, Traits>::Pop() {
   return old_head;
 }
 
-/**
- * @brief
- * @details
- *
- * @tparam T The type of elements stored in the queue.
- */
 template <typename T, typename Traits = DefaultTraits>
 class Queue {
  public:
@@ -100,21 +76,7 @@ class Queue {
   Queue(Queue &&) = delete;
   Queue &operator=(Queue &&) = delete;
 
-  /**
-   * @brief
-   * @details
-   *
-   * @param value The value to enqueue.
-   */
   auto Enqueue(T value) -> void;
-
-  /**
-   * @brief
-   * @details
-   *
-   * @return An optional containing the dequeued value if successful, or
-   *         std::nullopt if the queue was empty.
-   */
   [[nodiscard]] auto Dequeue() noexcept -> std::optional<T>;
 
  private:

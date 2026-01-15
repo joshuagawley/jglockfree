@@ -76,24 +76,3 @@ jobs:
 
       - name: Run benchmarks
         run: ./build/benchmarks/queue_benchmark --benchmark_format=console
-
-  docs:
-    runs-on: ubuntu-24.04
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y cmake ninja-build doxygen
-
-      - name: Configure
-        run: |
-          cmake -B build -G Ninja \
-            -DBUILD_TESTING=OFF \
-            -DBUILD_BENCHMARKS=OFF \
-            -DBUILD_DOCS=ON
-
-      - name: Build docs
-        run: cmake --build build --target docs

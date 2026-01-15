@@ -2,7 +2,6 @@ option(WARNINGS_AS_ERRORS "Treat compiler warnings as errors" OFF)
 option(ENABLE_ASAN "Enable AddressSanitizer" OFF)
 option(ENABLE_TSAN "Enable ThreadSanitizer" OFF)
 option(BUILD_BENCHMARKS "Build benchmarks" ON)
-option(BUILD_DOCS "Build docs" OFF)
 option(USE_SYSTEM_GOOGLETEST "Use system GoogleTest" OFF)
 option(USE_SYSTEM_GOOGLEBENCHMARK "Use system GoogleBenchmark" OFF)
 

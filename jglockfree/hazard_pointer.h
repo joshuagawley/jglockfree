@@ -10,78 +10,25 @@
 
 namespace jglockfree {
 
-/**
- * @brief
- * @details
- */
 struct RetiredNode {
-  void *ptr;              ///< Pointer to the retired object.
-  void (*deleter)(void *);  ///< Deleter function to reclaim the object.
+  void *ptr;
+  void (*deleter)(void *);
 };
 
-/**
- * @brief
- * @details
- *
- * @tparam Traits The traits class providing configuration constants such as
- *         cache line size and default slot count.
- * @tparam NumSlots The maximum number of hazard pointer slots available.
- *         Defaults to `Traits::kDefaultHazardSlots`.
- *
- * @see HazardPointerN For a convenience alias when using DefaultTraits.
- */
 template <typename Traits = DefaultTraits, std::size_t NumSlots = Traits::kDefaultHazardSlots>
 class HazardPointer {
  public:
-  /**
-   * @brief
-   * @details
-   *
-   * @throws std::runtime_error if no hazard pointer slots are available.
-   */
   HazardPointer();
-
   ~HazardPointer() noexcept;
 
-  /**
-   * @brief
-   * @details
-   *
-   * @tparam T The type of the pointer to protect.
-   * @param source The atomic pointer to protect.
-   * @return The protected pointer value.
-   */
   template <typename T>
-  [[nodiscard]] constexpr auto Protect(std::atomic<T *> &source) noexcept
-      -> T *;
+  [[nodiscard]] constexpr auto Protect(std::atomic<T *> &source) noexcept -> T *;
 
-  /**
-   * @brief
-   * @details
-   *
-   * @tparam T The type of the pointer to check.
-   * @param ptr The pointer to check for protection.
-   * @return true if the pointer is currently protected by any hazard pointer,
-   *         false otherwise.
-   */
   template <typename T>
   [[nodiscard]] static constexpr auto IsProtected(T *ptr) noexcept -> bool;
 
-  /**
-   * @brief
-   * @details
-   */
   constexpr auto Clear() noexcept -> void;
 
-  /**
-   * @brief
-   * @details
-   *
-   * @tparam T The type of the pointer to retire.
-   * @tparam Deleter The type of the deleter function.
-   * @param ptr The pointer to retire.
-   * @param deleter The deleter function to reclaim the object.
-   */
   template <typename T, typename Deleter>
   constexpr static auto Retire(T *ptr, Deleter deleter) -> void;
 
@@ -206,16 +153,6 @@ constexpr void HazardPointer<Traits, NumSlots>::Scan() {
   });
 }
 
-/**
- * @brief Convenience alias for HazardPointer with a custom slot count.
- * @details Provides a simpler syntax for specifying the number of hazard pointer
- *          slots while using DefaultTraits. Equivalent to
- *          `HazardPointer<DefaultTraits, NumSlots>`.
- *
- * @tparam NumSlots The maximum number of hazard pointer slots available.
- *
- * @see HazardPointer
- */
 template <std::size_t NumSlots>
 using HazardPointerN = HazardPointer<DefaultTraits, NumSlots>;
 

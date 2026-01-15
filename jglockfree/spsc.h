@@ -17,14 +17,6 @@
 
 namespace jglockfree {
 
-/**
- * @brief
- * @details
- *
- * @tparam T The type of elements stored in the queue.
- * @tparam NumSlots The maximum number of elements the queue can hold.
- * @tparam Traits The traits class providing configuration constants.
- */
 template <typename T, std::size_t NumSlots, typename Traits = DefaultTraits>
 class SpscQueue {
  public:
@@ -37,58 +29,11 @@ class SpscQueue {
   SpscQueue(SpscQueue &&) = delete;
   SpscQueue &operator=(SpscQueue &&) = delete;
 
-  /**
-   * @brief
-   * @details
-   *
-   * @param value The value to enqueue.
-   * @return true if the value was successfully enqueued, false if the queue
-   *         was full.
-   */
   [[nodiscard]] auto TryEnqueue(T value) -> bool;
-
-  /**
-   * @brief
-   * @details
-   *
-   * @return An optional containing the dequeued value if successful, or
-   *         std::nullopt if the queue was empty.
-   */
   [[nodiscard]] auto TryDequeue() -> std::optional<T>;
-
-  /**
-   * @brief
-   * @details
-   *
-   * @param value The value to enqueue.
-   */
   auto Enqueue(T value) -> void;
-
-  /**
-   * @brief
-   * @details
-   *
-   * @return The dequeued value.
-   */
   [[nodiscard]] auto Dequeue() -> T;
-
-  /**
-   * @brief
-   * @details
-   *
-   * @param value The value to enqueue.
-   * @return true if the value was successfully enqueued, false if the queue
-   *         was full.
-   */
   [[nodiscard]] constexpr auto TryEnqueueUnsignalled(T value) -> bool;
-
-  /**
-   * @brief
-   * @details
-   *
-   * @return An optional containing the dequeued value if successful, or
-   *         std::nullopt if the queue was empty.
-   */
   [[nodiscard]] constexpr auto TryDequeueUnsignalled() -> std::optional<T>;
 
  private:
