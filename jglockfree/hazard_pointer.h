@@ -134,7 +134,7 @@ constexpr void HazardPointer<Traits, NumSlots>::Scan() {
   // for small N (<= 256), use linear search
   if constexpr (NumSlots > 256) {
     std::sort(std::begin(protected_ptrs),
-              std::next(std::begin(protected_ptrs), count) + count);
+              std::next(std::begin(protected_ptrs), count));
   }
 
   std::erase_if(retired_, [&protected_ptrs, count](const RetiredNode &node) {
