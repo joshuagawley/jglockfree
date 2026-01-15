@@ -22,7 +22,7 @@ template <typename T, std::size_t NumSlots, typename Traits = DefaultTraits>
 class SpscQueue {
  public:
   SpscQueue() : head_{0}, tail_{0} {}
-  ~SpscQueue() noexcept = default;
+  ~SpscQueue() noexcept;
 
   constexpr SpscQueue(const SpscQueue &) = delete;
   constexpr SpscQueue &operator=(const SpscQueue &) = delete;
@@ -53,6 +53,17 @@ class SpscQueue {
   alignas(Traits::kCacheLineSize) std::condition_variable not_full_;
   alignas(Traits::kCacheLineSize) std::mutex mutex_;
 };
+
+template <typename T, std::size_t NumSlots, typename Traits>
+SpscQueue<T, NumSlots, Traits>::~SpscQueue() noexcept {
+  std::size_t current = head_.load(std::memory_order_relaxed);
+  const std::size_t end = tail_.load(std::memory_order_relaxed);
+
+  while (current != end) {
+    std::destroy_at(&slots_[current].value);
+    current = (current + 1) % (NumSlots + 1);
+  }
+}
 
 template <typename T, std::size_t NumSlots, typename Traits>
 constexpr bool SpscQueue<T, NumSlots, Traits>::TryEnqueueUnsignalled(T value) {
