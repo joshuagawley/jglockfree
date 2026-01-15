@@ -8,6 +8,7 @@
 #include <condition_variable>
 #include <mutex>
 #include <optional>
+#include <variant>
 
 #if defined(__x86_64__)
 #include <immintrin.h>  // for _mm_pause
