@@ -288,12 +288,12 @@ BENCHMARK_DEFINE_F(QueueFixture, MutexThroughput)(benchmark::State &state) {
 // clang-format off
 BENCHMARK_DEFINE_F(QueueFixture, LockFreeLatencyDistribution)(benchmark::State &state) {
   // clang-format on
-  std::vector<int64_t> latencies;
+  std::vector<std::int64_t> latencies;
   latencies.reserve(state.max_iterations);
 
   for (auto _ : state) {
     state.PauseTiming();
-    std::chrono::time_point<std::chrono::steady_clock> t0 =
+    std::chrono::high_resolution_clock::time_point t0 =
         std::chrono::high_resolution_clock::now();
     state.ResumeTiming();
 
@@ -301,7 +301,7 @@ BENCHMARK_DEFINE_F(QueueFixture, LockFreeLatencyDistribution)(benchmark::State &
     benchmark::DoNotOptimize(lock_free_queue.Dequeue());
 
     state.PauseTiming();
-    std::chrono::time_point<std::chrono::steady_clock> t1 =
+    std::chrono::high_resolution_clock::time_point t1 =
         std::chrono::high_resolution_clock::now();
     std::int64_t ns =
         std::chrono::duration_cast<std::chrono::nanoseconds>(t1 - t0).count();
@@ -309,7 +309,7 @@ BENCHMARK_DEFINE_F(QueueFixture, LockFreeLatencyDistribution)(benchmark::State &
     state.ResumeTiming();
   }
 
-  if (state.thread_index() == 0 && !latencies.empty()) {
+  if (state.thread_index() == 0 && not latencies.empty()) {
     std::ranges::sort(latencies);
 
     auto percentile = [&](const double p) -> double {
@@ -329,12 +329,12 @@ BENCHMARK_DEFINE_F(QueueFixture, LockFreeLatencyDistribution)(benchmark::State &
 // clang-format off
 BENCHMARK_DEFINE_F(QueueFixture, MutexLatencyDistribution)(benchmark::State &state) {
   // clang-format on
-  std::vector<int64_t> latencies;
+  std::vector<std::int64_t> latencies;
   latencies.reserve(state.max_iterations);
 
   for (auto _ : state) {
     state.PauseTiming();
-    std::chrono::time_point<std::chrono::steady_clock> t0 =
+    std::chrono::high_resolution_clock::time_point t0 =
         std::chrono::high_resolution_clock::now();
     state.ResumeTiming();
 
@@ -342,7 +342,7 @@ BENCHMARK_DEFINE_F(QueueFixture, MutexLatencyDistribution)(benchmark::State &sta
     benchmark::DoNotOptimize(mutex_queue.Dequeue());
 
     state.PauseTiming();
-    std::chrono::time_point<std::chrono::steady_clock> t1 =
+    std::chrono::high_resolution_clock::time_point t1 =
         std::chrono::high_resolution_clock::now();
     std::int64_t ns =
         std::chrono::duration_cast<std::chrono::nanoseconds>(t1 - t0).count();
@@ -350,7 +350,7 @@ BENCHMARK_DEFINE_F(QueueFixture, MutexLatencyDistribution)(benchmark::State &sta
     state.ResumeTiming();
   }
 
-  if (state.thread_index() == 0 && !latencies.empty()) {
+  if (state.thread_index() == 0 && not latencies.empty()) {
     std::ranges::sort(latencies);
 
     auto percentile = [&](const double p) -> double {
