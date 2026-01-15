@@ -53,14 +53,15 @@ reader's announcement before freeing.
 
 ### Memory ordering
 In the `Protect()` function (where we execute the reader protocol), we use sequentially consistent memory ordering when
-storing the source pointer in the next available slot and reloading the pointer from source: On x86 processors, we could 
+storing the source pointer in the next available slot and reloading the pointer from source:
 ```c++
 slot_->store(ptr, std::memory_order_seq_cst);
 auto current = source.load(std::memory_order_seq_cst);
 ```
-On x86, acquire/release semantics would have sufficed here, since on x86, stores are not reordered with subsequent 
-loads. On ARM, however, such a reordering is permitted. If the reload comes before the store, then a deleter could scan
-the hazard registry, see nothing, and delete the node before we reload, causing us to dereference freed memory.
+Using acquire/release ordering here is not sufficient, because even on x86 (which has a strong memory model), the 
+hardware is permitted to reorder a store followed by a load to a different address.
+This would allow a race condition where we read the pointer _before_ our reservation is visible to other threads,
+potentially causing use-after-free, as the node we dereference may have just been freed.
 
 ### Implementation notes
 The `Scan()` function uses a stack-allocated array rather than `std::unordered_set` to eliminate heap allocations in the
