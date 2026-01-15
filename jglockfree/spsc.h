@@ -157,8 +157,6 @@ T SpscQueue<T, NumSlots, Traits>::Dequeue() {
     _mm_pause();
 #elif defined(__aarch64__)
     asm volatile("yield");
-#else
-    std::this_thread::yield();
 #endif
   }
 
