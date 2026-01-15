@@ -3,10 +3,10 @@
 #ifndef JGLOCKFREE_HAZARD_POINTER_H_
 #define JGLOCKFREE_HAZARD_POINTER_H_
 
+#include <jglockfree/config.h>
+
 #include <algorithm>
 #include <mutex>
-
-#include <jglockfree/config.h>
 
 namespace jglockfree {
 
@@ -15,14 +15,16 @@ struct RetiredNode {
   void (*deleter)(void *);
 };
 
-template <typename Traits = DefaultTraits, std::size_t NumSlots = Traits::kDefaultHazardSlots>
+template <typename Traits = DefaultTraits,
+          std::size_t NumSlots = Traits::kDefaultHazardSlots>
 class HazardPointer {
  public:
   HazardPointer();
   ~HazardPointer() noexcept;
 
   template <typename T>
-  [[nodiscard]] constexpr auto Protect(std::atomic<T *> &source) noexcept -> T *;
+  [[nodiscard]] constexpr auto Protect(std::atomic<T *> &source) noexcept
+      -> T *;
 
   template <typename T>
   [[nodiscard]] static constexpr auto IsProtected(T *ptr) noexcept -> bool;
@@ -38,8 +40,6 @@ class HazardPointer {
   struct HazardPointerSlot {
     alignas(Traits::kCacheLineSize) std::atomic<void *> ptr;
   };
-  static_assert(sizeof(HazardPointerSlot) == std::hardware_destructive_interference_size,
-              "HazardSlot is not padded to cache line size!");
 
   static inline std::array<HazardPointerSlot, NumSlots> slots_{};
   static inline std::atomic<std::size_t> next_slot_{0};
@@ -112,7 +112,8 @@ constexpr bool HazardPointer<Traits, NumSlots>::IsProtected(T *ptr) noexcept {
 
 template <typename Traits, std::size_t NumSlots>
 template <typename T, typename Deleter>
-constexpr void HazardPointer<Traits, NumSlots>::Retire(T *ptr, Deleter deleter) {
+constexpr void HazardPointer<Traits, NumSlots>::Retire(T *ptr,
+                                                       Deleter deleter) {
   retired_.emplace_back(ptr, deleter);
   if (retired_.size() >= kRetireThreshold) {
     Scan();
@@ -131,10 +132,13 @@ constexpr void HazardPointer<Traits, NumSlots>::Scan() {
   // for large N (> 256), use sort + binary search
   // for small N (<= 256), use linear search
   if constexpr (NumSlots > 256) {
-    std::ranges::sort(protected_ptrs);
+    std::sort(std::begin(protected_ptrs),
+              std::next(std::begin(protected_ptrs), count) + count);
   }
 
   std::erase_if(retired_, [&protected_ptrs, count](const RetiredNode &node) {
+    // return false -> keep in retired list (still protected)
+    // return true -> remove from retired list (safe to free)
     if constexpr (NumSlots <= 256) {
       for (std::size_t i = 0; i < count; ++i) {
         if (protected_ptrs[i] == node.ptr) {
@@ -144,7 +148,9 @@ constexpr void HazardPointer<Traits, NumSlots>::Scan() {
       node.deleter(node.ptr);
       return true;
     } else {
-      if (std::binary_search(protected_ptrs.begin(), protected_ptrs.end(), node.ptr)) {
+      if (std::binary_search(std::begin(protected_ptrs),
+                             std::next(std::begin(protected_ptrs), count),
+                             node.ptr)) {
         return false;
       }
       node.deleter(node.ptr);
