@@ -66,6 +66,7 @@ potentially causing use-after-free, as the node we dereference may have just bee
 ### Implementation notes
 The `Scan()` function uses a stack-allocated array rather than `std::unordered_set` to eliminate heap allocations in the
 hot path and because an array has better cache locality than a set.
+
 In addition, we use compile time branching to choose between sorting and then binary search for hazard pointers with a large
 number of slots (more than 256), or linear search for fewer slots (256 or less).
 For the default 128 slots, this is approximately 25% faster due to eliminated heap allocations and better cache locality,
@@ -96,7 +97,7 @@ is returned to the pool.
 ## Limitations
 Our implementation has the following limitations:
 1. The queue destructor assumes no concurrent operations.
-2. With thread local free lists, the producer's thread's free list empties as nodes are allocated
+2. With thread-local free lists, the producer's thread's free list empties as nodes are allocated
 while the consumer's free list keeps growing as nodes are retired. This could result in unbounded memory consumption.
 
 
@@ -195,13 +196,13 @@ At 8 threads (mixed enqueue/dequeue workload):
 | p99        | 7.5 µs    | 49.9 µs |
 | p999       | 111 µs    | 121 µs  |
 
-The lock-free queue's 99th percentile is 6.6 times lower because no thread can block another; contention results in CAS
+The lock-free queue's 99th percentile latency is 6.6 times lower because no thread can block another; contention results in CAS
 retries rather than blocking.
 
-For latency-sensitive applications where p99 matters more than throughput, the lock-free
-queue is preferable despite its lower average performance.
+For latency-sensitive applications where 99th percentile tail latency matters more than throughput, the lock-free
+queue is preferable.
 
 ## Further Reading
 - Michael, M. M. and Scott, M. L., "Simple, Fast, and Practical Non-Blocking and Blocking Concurrent Queue Algorithms" (PODC 1996)
 - Michael, M. M., "Hazard Pointers: Safe Memory Reclamation for Lock-Free Objects" (IEEE TPDS 2004)
-- Thompson, M., Farley, D., Barker, M., Gee, P., and Stewart, A., "Disruptor: High performance alternative to bounded queues for exchanging data between concurrent threads" (LMAX Exchange, 2011)
+- Herlihy, M. and Shavit, N., "The Art of Multiprocessor Programming" (2008)
