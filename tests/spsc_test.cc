@@ -113,7 +113,7 @@ TEST(SpscQueueTest, FillToCapacity) {
   // With NumSlots=8, array size is 9, capacity is 8
   jglockfree::SpscQueue<int, 8> queue;
 
-  for (int i = 0; i < 8; ++i) {
+  for (std::size_t i = 0; i < 8; ++i) {
     EXPECT_TRUE(queue.TryEnqueue(std::move(i)))
         << "Failed to enqueue element " << i;
   }
@@ -122,7 +122,7 @@ TEST(SpscQueueTest, FillToCapacity) {
   EXPECT_FALSE(queue.TryEnqueue(999)) << "Queue should be full";
 
   // All 8 should come back out
-  for (int i = 0; i < 8; ++i) {
+  for (std::size_t i = 0; i < 8; ++i) {
     const auto result = queue.TryDequeue();
     ASSERT_TRUE(result.has_value()) << "Failed to dequeue element " << i;
     EXPECT_EQ(*result, i);
@@ -335,13 +335,13 @@ TEST(SpscQueueTest, RepeatedFillAndDrain) {
   // Completely fill, completely drain, repeat many times
   jglockfree::SpscQueue<int, 8> queue;
 
-  for (int round = 0; round < 100; ++round) {
-    for (int i = 0; i < 8; ++i) {
+  for (std::size_t round = 0; round < 100; ++round) {
+    for (std::size_t i = 0; i < 8; ++i) {
       EXPECT_TRUE(queue.TryEnqueue(round * 100 + i));
     }
     EXPECT_FALSE(queue.TryEnqueue(-1)) << "Should be full at round " << round;
 
-    for (int i = 0; i < 8; ++i) {
+    for (std::size_t i = 0; i < 8; ++i) {
       auto result = queue.TryDequeue();
       ASSERT_TRUE(result.has_value());
       EXPECT_EQ(*result, round * 100 + i);
@@ -646,13 +646,13 @@ TEST(SpscQueueBlockingTest, BlockingWithMoveOnlyTypes) {
   jglockfree::SpscQueue<std::unique_ptr<int>, 4> queue;
 
   std::thread producer([&] {
-    for (int i = 0; i < 10; ++i) {
+    for (std::size_t i = 0; i < 10; ++i) {
       queue.Enqueue(std::make_unique<int>(i));
     }
   });
 
   std::thread consumer([&] {
-    for (int expected = 0; expected < 10; ++expected) {
+    for (std::size_t expected = 0; expected < 10; ++expected) {
       auto ptr = queue.Dequeue();
       EXPECT_EQ(*ptr, expected);
     }
@@ -745,13 +745,13 @@ TEST(SpscQueueTest, NonPowerOfTwoSize_Seven) {
   jglockfree::SpscQueue<int, 7> queue;  // capacity of 7
 
   // Fill completely
-  for (int i = 0; i < 7; ++i) {
+  for (std::size_t i = 0; i < 7; ++i) {
     EXPECT_TRUE(queue.TryEnqueue(std::move(i))) << "Failed at i=" << i;
   }
   EXPECT_FALSE(queue.TryEnqueue(99));  // full
 
   // Drain completely
-  for (int i = 0; i < 7; ++i) {
+  for (std::size_t i = 0; i < 7; ++i) {
     auto result = queue.TryDequeue();
     ASSERT_TRUE(result.has_value()) << "Failed at i=" << i;
     EXPECT_EQ(*result, i);
@@ -764,14 +764,14 @@ TEST(SpscQueueTest, NonPowerOfTwoSize_WrapAround) {
   jglockfree::SpscQueue<int, 5> queue;  // array size 6, capacity 5
 
   // Do many cycles to exercise wraparound
-  for (int cycle = 0; cycle < 20; ++cycle) {
+  for (std::size_t cycle = 0; cycle < 20; ++cycle) {
     // Partially fill
-    for (int i = 0; i < 3; ++i) {
+    for (std::size_t i = 0; i < 3; ++i) {
       EXPECT_TRUE(queue.TryEnqueue(cycle * 100 + i));
     }
 
     // Partially drain
-    for (int i = 0; i < 3; ++i) {
+    for (std::size_t i = 0; i < 3; ++i) {
       auto result = queue.TryDequeue();
       ASSERT_TRUE(result.has_value());
       EXPECT_EQ(*result, cycle * 100 + i);

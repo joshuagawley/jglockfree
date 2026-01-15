@@ -30,19 +30,19 @@ TEST(QueueTest, FIFOOrdering) {
 
 TEST(QueueTest, ConcurrentEnqueueDequeue) {
   jglockfree::Queue<int> queue{};
-  constexpr int kNumProducers = 8;
-  constexpr int kNumConsumers = 8;
-  constexpr int kItemsPerProducer = 100'000;
+  constexpr std::size_t kNumProducers = 8;
+  constexpr std::size_t kNumConsumers = 8;
+  constexpr std::size_t kItemsPerProducer = 100'000;
 
-  std::atomic total_dequeued{0};
+  std::atomic<std::size_t> total_dequeued{0};
   std::vector<std::thread> producers;
   std::vector<std::thread> consumers;
   producers.reserve(kNumProducers);
   consumers.reserve(kNumConsumers);
 
-  for (int p = 0; p < kNumProducers; ++p) {
+  for (std::size_t p = 0; p < kNumProducers; ++p) {
     producers.emplace_back([&queue, p] {
-      for (int i = 0; i < kItemsPerProducer; ++i) {
+      for (std::size_t i = 0; i < kItemsPerProducer; ++i) {
         queue.Enqueue(p * kItemsPerProducer + i);
       }
     });
@@ -52,7 +52,7 @@ TEST(QueueTest, ConcurrentEnqueueDequeue) {
     t.join();
   }
 
-  for (int c = 0; c < kNumConsumers; ++c) {
+  for (std::size_t c = 0; c < kNumConsumers; ++c) {
     consumers.emplace_back([&queue, &total_dequeued] {
       while (auto _ = queue.Dequeue()) {
         total_dequeued.fetch_add(1, std::memory_order_relaxed);

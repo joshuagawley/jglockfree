@@ -60,7 +60,7 @@ BENCHMARK_TEMPLATE_DEFINE_F(HazardSlotFixture, SlotHammer256, 256)(benchmark::St
 
   for (auto _ : state) {
     jglockfree::HazardPointerN<256> hp;
-    auto *ptr = hp.Protect(shared_node);
+    BenchNode *ptr = hp.Protect(shared_node);
     benchmark::DoNotOptimize(ptr);
     hp.Clear();
   }
@@ -77,7 +77,7 @@ BENCHMARK_TEMPLATE_DEFINE_F(HazardSlotFixture, SlotHammer1024, 1024)(benchmark::
 
   for (auto _ : state) {
     jglockfree::HazardPointerN<1024> hp;
-    auto *ptr = hp.Protect(shared_node);
+    BenchNode *ptr = hp.Protect(shared_node);
     benchmark::DoNotOptimize(ptr);
     hp.Clear();
   }
@@ -95,14 +95,13 @@ BENCHMARK_TEMPLATE_DEFINE_F(HazardSlotFixture, MixedWorkload256, 256)(benchmark:
 
   for (auto _ : state) {
     jglockfree::HazardPointerN<256> hp;
-    auto *ptr = hp.Protect(shared_node);
+    BenchNode *ptr = hp.Protect(shared_node);
     benchmark::DoNotOptimize(ptr->value);
     hp.Clear();
 
     auto *to_retire = new BenchNode{state.thread_index()};
-    jglockfree::HazardPointerN<256>::Retire(to_retire, [](void *p) {
-      delete static_cast<BenchNode *>(p);
-    });
+    jglockfree::HazardPointerN<256>::Retire(
+        to_retire, [](void *p) { delete static_cast<BenchNode *>(p); });
   }
 
   if (state.thread_index() == 0) {
@@ -117,14 +116,13 @@ BENCHMARK_TEMPLATE_DEFINE_F(HazardSlotFixture, MixedWorkload1024, 1024)(benchmar
 
   for (auto _ : state) {
     jglockfree::HazardPointerN<1024> hp;
-    auto *ptr = hp.Protect(shared_node);
+    BenchNode *ptr = hp.Protect(shared_node);
     benchmark::DoNotOptimize(ptr->value);
     hp.Clear();
 
     auto *to_retire = new BenchNode{state.thread_index()};
-    jglockfree::HazardPointerN<1024>::Retire(to_retire, [](void *p) {
-      delete static_cast<BenchNode *>(p);
-    });
+    jglockfree::HazardPointerN<1024>::Retire(
+        to_retire, [](void *p) { delete static_cast<BenchNode *>(p); });
   }
 
   if (state.thread_index() == 0) {
@@ -241,7 +239,7 @@ BENCHMARK_DEFINE_F(QueueFixture, LockFreeThroughput)(benchmark::State &state) {
   for (auto _ : state) {
     if (state.thread_index() == 0) {
       // Producer: enqueue all items
-      for (std::size_t i = 0; i < kItemsPerIteration; ++i) {
+      for (int i = 0; i < kItemsPerIteration; ++i) {
         lock_free_queue.Enqueue(i);
       }
     } else {
@@ -270,7 +268,7 @@ BENCHMARK_DEFINE_F(QueueFixture, MutexThroughput)(benchmark::State &state) {
   for (auto _ : state) {
     if (state.thread_index() == 0) {
       // Producer: enqueue all items
-      for (std::size_t i = 0; i < kItemsPerIteration; ++i) {
+      for (int i = 0; i < kItemsPerIteration; ++i) {
         mutex_queue.Enqueue(i);
       }
     } else {
@@ -294,15 +292,17 @@ BENCHMARK_DEFINE_F(QueueFixture, LockFreeLatencyDistribution)(benchmark::State &
 
   for (auto _ : state) {
     state.PauseTiming();
-    auto t0 = std::chrono::high_resolution_clock::now();
+    std::chrono::time_point<std::chrono::steady_clock> t0 =
+        std::chrono::high_resolution_clock::now();
     state.ResumeTiming();
 
     lock_free_queue.Enqueue(42);
     benchmark::DoNotOptimize(lock_free_queue.Dequeue());
 
     state.PauseTiming();
-    auto t1 = std::chrono::high_resolution_clock::now();
-    auto ns =
+    std::chrono::time_point<std::chrono::steady_clock> t1 =
+        std::chrono::high_resolution_clock::now();
+    std::int64_t ns =
         std::chrono::duration_cast<std::chrono::nanoseconds>(t1 - t0).count();
     latencies.push_back(ns);
     state.ResumeTiming();
@@ -311,7 +311,7 @@ BENCHMARK_DEFINE_F(QueueFixture, LockFreeLatencyDistribution)(benchmark::State &
   if (state.thread_index() == 0 && !latencies.empty()) {
     std::ranges::sort(latencies);
 
-    auto percentile = [&](double p) -> double {
+    auto percentile = [&](const double p) -> double {
       const auto idx = static_cast<std::size_t>(
           p * static_cast<double>(latencies.size() - 1));
       return static_cast<double>(latencies[idx]);
@@ -333,15 +333,17 @@ BENCHMARK_DEFINE_F(QueueFixture, MutexLatencyDistribution)(benchmark::State &sta
 
   for (auto _ : state) {
     state.PauseTiming();
-    auto t0 = std::chrono::high_resolution_clock::now();
+    std::chrono::time_point<std::chrono::steady_clock> t0 =
+        std::chrono::high_resolution_clock::now();
     state.ResumeTiming();
 
     mutex_queue.Enqueue(42);
     benchmark::DoNotOptimize(mutex_queue.Dequeue());
 
     state.PauseTiming();
-    auto t1 = std::chrono::high_resolution_clock::now();
-    auto ns =
+    std::chrono::time_point<std::chrono::steady_clock> t1 =
+        std::chrono::high_resolution_clock::now();
+    std::int64_t ns =
         std::chrono::duration_cast<std::chrono::nanoseconds>(t1 - t0).count();
     latencies.push_back(ns);
     state.ResumeTiming();
@@ -350,8 +352,8 @@ BENCHMARK_DEFINE_F(QueueFixture, MutexLatencyDistribution)(benchmark::State &sta
   if (state.thread_index() == 0 && !latencies.empty()) {
     std::ranges::sort(latencies);
 
-    auto percentile = [&](double p) -> double {
-      auto idx = static_cast<std::size_t>(
+    auto percentile = [&](const double p) -> double {
+      const auto idx = static_cast<std::size_t>(
           p * static_cast<double>(latencies.size() - 1));
       return static_cast<double>(latencies[idx]);
     };

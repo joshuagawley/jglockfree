@@ -90,8 +90,8 @@ TEST(HazardPointerTest, ClearIsIdempotent) {
 // This test is probabilistic - it may not catch bugs reliably,
 // but under ThreadSanitizer it can detect data races
 TEST(HazardPointerTest, StressTestProtectClearCycle) {
-  constexpr int kNumIterations{100'000};
-  constexpr int kNumNodes{4};
+  constexpr std::size_t kNumIterations{100'000};
+  constexpr std::size_t kNumNodes{4};
 
   std::array<int, kNumNodes> nodes{};
   std::atomic<int *> source{&nodes[0]};
@@ -99,7 +99,7 @@ TEST(HazardPointerTest, StressTestProtectClearCycle) {
 
   // Thread that constantly changes the source
   std::thread mutator([&] {
-    int idx = 0;
+    std::size_t idx = 0;
     while (not stop.load(std::memory_order_relaxed)) {
       idx = (idx + 1) % kNumNodes;
       source.store(&nodes[idx], std::memory_order_release);
@@ -108,7 +108,7 @@ TEST(HazardPointerTest, StressTestProtectClearCycle) {
 
   // Main thread repeatedly protects and clears
   jglockfree::HazardPointer hp;
-  for (int i = 0; i < kNumIterations; ++i) {
+  for (std::size_t i = 0; i < kNumIterations; ++i) {
     int *ptr = hp.Protect(source);
     // Verify we got a valid pointer from our array
     ASSERT_GE(ptr, &nodes[0]);
@@ -121,17 +121,17 @@ TEST(HazardPointerTest, StressTestProtectClearCycle) {
 }
 
 TEST(HazardPointerTest, StressRetirement) {
-  constexpr int kThreads{8};
-  constexpr int kOpsPerThread{100'000};
+  constexpr std::size_t kThreads{8};
+  constexpr std::size_t kOpsPerThread{100'000};
 
-  jglockfree::Queue<int> queue;
+  jglockfree::Queue<std::size_t> queue;
 
   std::vector<std::thread> threads;
   threads.reserve(kThreads);
 
-  for (int t = 0; t < kThreads; ++t) {
+  for (std::size_t t = 0; t < kThreads; ++t) {
     threads.emplace_back([&queue, t] {
-      for (int i = 0; i < kOpsPerThread; ++i) {
+      for (std::size_t i = 0; i < kOpsPerThread; ++i) {
         queue.Enqueue(t * kOpsPerThread + i);
         queue.Dequeue();
       }
@@ -144,15 +144,15 @@ TEST(HazardPointerTest, StressRetirement) {
 }
 
 TEST(HazardPointerTest, DelayedReader) {
-  constexpr int kIterations{10'000};
+  constexpr std::size_t kIterations{10'000};
 
   jglockfree::Queue<int> queue;
-  std::atomic<int> iter{0};
+  std::atomic<std::size_t> iter{0};
   constexpr std::atomic<bool> stop{false};
 
   auto worker = [&] {
     while (not stop.load(std::memory_order_relaxed)) {
-      int i = iter.fetch_add(1, std::memory_order_relaxed);
+      std::size_t i = iter.fetch_add(1, std::memory_order_relaxed);
       if (i >= kIterations) break;
 
       queue.Enqueue(1);
@@ -176,7 +176,7 @@ TEST(HazardPointerTest, SlotExhaustionThrows) {
   std::vector<std::unique_ptr<SmallHP>> hps;
 
   // Allocate all 4 slots
-  for (int i = 0; i < 4; ++i) {
+  for (std::size_t i = 0; i < 4; ++i) {
     EXPECT_NO_THROW(hps.push_back(std::make_unique<SmallHP>()))
         << "Failed to allocate slot " << i;
   }
@@ -193,7 +193,7 @@ TEST(HazardPointerTest, SlotReuseAfterDestruction) {
   // Allocate all 4 slots
   {
     std::vector<std::unique_ptr<SmallHP>> hps;
-    for (int i = 0; i < 4; ++i) {
+    for (std::size_t i = 0; i < 4; ++i) {
       hps.push_back(std::make_unique<SmallHP>());
     }
     // All slots freed when vector goes out of scope
@@ -201,7 +201,7 @@ TEST(HazardPointerTest, SlotReuseAfterDestruction) {
 
   // Should be able to allocate 4 more
   std::vector<std::unique_ptr<SmallHP>> hps2;
-  for (int i = 0; i < 4; ++i) {
+  for (std::size_t i = 0; i < 4; ++i) {
     EXPECT_NO_THROW(hps2.push_back(std::make_unique<SmallHP>()))
         << "Failed to reuse slot " << i;
   }
@@ -229,16 +229,16 @@ TEST(HazardPointerTest, PartialSlotReuse) {
 TEST(HazardPointerTest, SlotExhaustionMultithreaded) {
   using SmallHP = jglockfree::HazardPointerN<8>;
 
-  std::atomic<int> successful_allocations{0};
-  std::atomic<int> failed_allocations{0};
+  std::atomic<std::size_t> successful_allocations{0};
+  std::atomic<std::size_t> failed_allocations{0};
   std::atomic<bool> start{false};
 
-  constexpr int kThreads = 16;  // More threads than slots
+  constexpr std::size_t kThreads = 16;  // More threads than slots
 
   std::vector<std::thread> threads;
   threads.reserve(kThreads);
 
-  for (int i = 0; i < kThreads; ++i) {
+  for (std::size_t i = 0; i < kThreads; ++i) {
     threads.emplace_back([&] {
       while (!start.load(std::memory_order_acquire)) {
         std::this_thread::yield();
