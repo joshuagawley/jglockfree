@@ -79,7 +79,7 @@ bool SpscQueue<T, NumSlots, Traits>::TryEnqueue(T value) {
 template <typename T, std::size_t NumSlots, typename Traits>
 void SpscQueue<T, NumSlots, Traits>::Enqueue(T value) {
   // Fast path: spin for a bit
-  for (int i = 0; i < 1000; ++i) {
+  for (int i = 0; i < Traits::kSpinCount; ++i) {
     // We can't use TryEnqueueUnsignalled because it consumes the value,
     // so inline the logic
     const auto head = head_.load(std::memory_order_acquire);
