@@ -65,6 +65,7 @@ Node *FreeList<Node, Traits>::Pop() {
 }
 
 template <typename T, typename Traits = DefaultTraits>
+  requires std::is_nothrow_move_constructible_v<T>
 class Queue {
  public:
   Queue();
@@ -98,10 +99,12 @@ class Queue {
 };
 
 template <typename T, typename Traits>
+  requires std::is_nothrow_move_constructible_v<T>
 thread_local FreeList<typename Queue<T, Traits>::Node, Traits>
     Queue<T, Traits>::free_list_{};
 
 template <typename T, typename Traits>
+  requires std::is_nothrow_move_constructible_v<T>
 Queue<T, Traits>::Queue() {
   auto dummy = new Node{};
   head_.store(dummy, std::memory_order_relaxed);
@@ -109,6 +112,7 @@ Queue<T, Traits>::Queue() {
 }
 
 template <typename T, typename Traits>
+  requires std::is_nothrow_move_constructible_v<T>
 Queue<T, Traits>::~Queue() noexcept {
   auto current = head_.load(std::memory_order_relaxed);
   while (current != nullptr) {
@@ -119,6 +123,7 @@ Queue<T, Traits>::~Queue() noexcept {
 }
 
 template <typename T, typename Traits>
+  requires std::is_nothrow_move_constructible_v<T>
 void Queue<T, Traits>::Enqueue(T value) {
   thread_local HazardPointer hp_tail;
   Node *node = AllocateNode(std::move(value));
@@ -153,6 +158,7 @@ void Queue<T, Traits>::Enqueue(T value) {
 }
 
 template <typename T, typename Traits>
+  requires std::is_nothrow_move_constructible_v<T>
 std::optional<T> Queue<T, Traits>::Dequeue() noexcept {
   thread_local HazardPointer hp_head;
   thread_local HazardPointer hp_next;
@@ -188,6 +194,7 @@ std::optional<T> Queue<T, Traits>::Dequeue() noexcept {
 }
 
 template <typename T, typename Traits>
+  requires std::is_nothrow_move_constructible_v<T>
 Queue<T, Traits>::Node *Queue<T, Traits>::AllocateNode(T value) {
   Node *node = free_list_.Pop();
   if (node != nullptr) {
@@ -207,6 +214,7 @@ Queue<T, Traits>::Node *Queue<T, Traits>::AllocateNode(T value) {
 }
 
 template <typename T, typename Traits>
+  requires std::is_nothrow_move_constructible_v<T>
 void Queue<T, Traits>::RecycleNode(void *ptr) {
   auto node = static_cast<Node *>(ptr);
   std::destroy_at(&node->value);

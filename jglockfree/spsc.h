@@ -18,6 +18,7 @@
 namespace jglockfree {
 
 template <typename T, std::size_t NumSlots, typename Traits = DefaultTraits>
+  requires std::is_default_constructible_v<T>
 class SpscQueue {
  public:
   SpscQueue() : head_{0}, tail_{0} {}
@@ -46,6 +47,7 @@ class SpscQueue {
 };
 
 template <typename T, std::size_t NumSlots, typename Traits>
+  requires std::is_default_constructible_v<T>
 constexpr bool SpscQueue<T, NumSlots, Traits>::TryEnqueueUnsignalled(T value) {
   const std::size_t head = head_.load(std::memory_order_acquire);
   const std::size_t tail = tail_.load(std::memory_order_relaxed);
@@ -62,6 +64,7 @@ constexpr bool SpscQueue<T, NumSlots, Traits>::TryEnqueueUnsignalled(T value) {
 }
 
 template <typename T, std::size_t NumSlots, typename Traits>
+  requires std::is_default_constructible_v<T>
 bool SpscQueue<T, NumSlots, Traits>::TryEnqueue(T value) {
   const bool success = TryEnqueueUnsignalled(std::move(value));
   if (success) {
@@ -72,6 +75,7 @@ bool SpscQueue<T, NumSlots, Traits>::TryEnqueue(T value) {
 }
 
 template <typename T, std::size_t NumSlots, typename Traits>
+  requires std::is_default_constructible_v<T>
 void SpscQueue<T, NumSlots, Traits>::Enqueue(T value) {
   // Fast path: spin for a bit
   for (int i = 0; i < Traits::kSpinCount; ++i) {
@@ -114,6 +118,7 @@ void SpscQueue<T, NumSlots, Traits>::Enqueue(T value) {
 }
 
 template <typename T, std::size_t NumSlots, typename Traits>
+  requires std::is_default_constructible_v<T>
 constexpr std::optional<T>
 SpscQueue<T, NumSlots, Traits>::TryDequeueUnsignalled() {
   const std::size_t head = head_.load(std::memory_order_relaxed);
@@ -131,6 +136,7 @@ SpscQueue<T, NumSlots, Traits>::TryDequeueUnsignalled() {
 }
 
 template <typename T, std::size_t NumSlots, typename Traits>
+  requires std::is_default_constructible_v<T>
 std::optional<T> SpscQueue<T, NumSlots, Traits>::TryDequeue() {
   std::optional<T> result = TryDequeueUnsignalled();
   if (result.has_value()) {
@@ -141,6 +147,7 @@ std::optional<T> SpscQueue<T, NumSlots, Traits>::TryDequeue() {
 }
 
 template <typename T, std::size_t NumSlots, typename Traits>
+  requires std::is_default_constructible_v<T>
 T SpscQueue<T, NumSlots, Traits>::Dequeue() {
   // Fast path: spin for a bit
   for (std::size_t i = 0; i < Traits::kSpinCount; ++i) {
