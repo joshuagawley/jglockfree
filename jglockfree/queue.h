@@ -4,10 +4,10 @@
 #define JGLOCKFREE_INCLUDE_QUEUE_H_
 
 #include <atomic>
-#include <new>
 #include <optional>
 
-#include "hazard_pointer.h"
+#include <jglockfree/config.h>
+#include <jglockfree/hazard_pointer.h>
 
 namespace jglockfree {
 
@@ -17,7 +17,7 @@ namespace jglockfree {
  *
  * @tparam Node The type of nodes stored in the free list.
  */
-template <typename Node>
+template <typename Node, typename Traits = DefaultTraits>
 class FreeList {
 public:
   FreeList() = default;
@@ -45,11 +45,11 @@ public:
    */
   auto Pop() -> Node *;
 private:
-  alignas(std::hardware_destructive_interference_size) std::atomic<Node *> head_{nullptr};
+  alignas(Traits::kCacheLineSize) std::atomic<Node *> head_{nullptr};
 };
 
-template <typename Node>
-FreeList<Node>::~FreeList() noexcept {
+template <typename Node, typename Traits>
+FreeList<Node, Traits>::~FreeList() noexcept {
   auto current = head_.load(std::memory_order_relaxed);
   while (current != nullptr) {
     auto next = current->next.load(std::memory_order_relaxed);
@@ -58,8 +58,8 @@ FreeList<Node>::~FreeList() noexcept {
   }
 }
 
-template <typename Node>
-void FreeList<Node>::Push(Node *node) {
+template <typename Node, typename Traits>
+void FreeList<Node, Traits>::Push(Node *node) {
   auto old_head = head_.load(std::memory_order_relaxed);
   do {
     node->next.store(old_head, std::memory_order_relaxed);
@@ -68,8 +68,8 @@ void FreeList<Node>::Push(Node *node) {
                                            std::memory_order_relaxed));
 }
 
-template <typename Node>
-Node *FreeList<Node>::Pop() {
+template <typename Node, typename Traits>
+Node *FreeList<Node, Traits>::Pop() {
   auto old_head = head_.load(std::memory_order_relaxed);
   Node *next{nullptr};
   do {
@@ -88,7 +88,7 @@ Node *FreeList<Node>::Pop() {
  *
  * @tparam T The type of elements stored in the queue.
  */
-template <typename T>
+template <typename T, typename Traits = DefaultTraits>
 class Queue {
  public:
   Queue();
@@ -130,25 +130,23 @@ class Queue {
   auto AllocateNode(T value) -> Node *;
   static auto RecycleNode(void *ptr) -> void;
 
-  alignas(
-      std::hardware_destructive_interference_size) std::atomic<Node *> head_;
-  alignas(
-      std::hardware_destructive_interference_size) std::atomic<Node *> tail_;
-  static thread_local FreeList<Node> free_list_;
+  alignas(Traits::kCacheLineSize) std::atomic<Node *> head_;
+  alignas(Traits::kCacheLineSize) std::atomic<Node *> tail_;
+  static thread_local FreeList<Node, Traits> free_list_;
 };
 
-template <typename T>
-thread_local FreeList<typename Queue<T>::Node> Queue<T>::free_list_{};
+template <typename T, typename Traits>
+thread_local FreeList<typename Queue<T, Traits>::Node, Traits> Queue<T, Traits>::free_list_{};
 
-template <typename T>
-Queue<T>::Queue() {
+template <typename T, typename Traits>
+Queue<T, Traits>::Queue() {
   auto dummy = new Node{};
   head_.store(dummy, std::memory_order_relaxed);
   tail_.store(dummy, std::memory_order_relaxed);
 }
 
-template <typename T>
-Queue<T>::~Queue() noexcept {
+template <typename T, typename Traits>
+Queue<T, Traits>::~Queue() noexcept {
   auto current = head_.load(std::memory_order_relaxed);
   while (current != nullptr) {
     auto next = current->next.load(std::memory_order_relaxed);
@@ -157,8 +155,8 @@ Queue<T>::~Queue() noexcept {
   }
 }
 
-template <typename T>
-void Queue<T>::Enqueue(T value) {
+template <typename T, typename Traits>
+void Queue<T, Traits>::Enqueue(T value) {
   thread_local HazardPointer hp_tail;
   auto node = AllocateNode(std::move(value));
 
@@ -189,8 +187,8 @@ void Queue<T>::Enqueue(T value) {
   }
 }
 
-template <typename T>
-std::optional<T> Queue<T>::Dequeue() noexcept {
+template <typename T, typename Traits>
+std::optional<T> Queue<T, Traits>::Dequeue() noexcept {
   thread_local HazardPointer hp_head;
   thread_local HazardPointer hp_next;
 
@@ -224,8 +222,8 @@ std::optional<T> Queue<T>::Dequeue() noexcept {
   }
 }
 
-template <typename T>
-Queue<T>::Node *Queue<T>::AllocateNode(T value) {
+template <typename T, typename Traits>
+Queue<T, Traits>::Node *Queue<T, Traits>::AllocateNode(T value) {
  auto *node = free_list_.Pop();
   if (node != nullptr) {
     std::construct_at(&node->value, std::move(value));
@@ -236,8 +234,8 @@ Queue<T>::Node *Queue<T>::AllocateNode(T value) {
   return node;
 }
 
-template <typename T>
-void Queue<T>::RecycleNode(void *ptr) {
+template <typename T, typename Traits>
+void Queue<T, Traits>::RecycleNode(void *ptr) {
   auto node = static_cast<Node *>(ptr);
   std::destroy_at(&node->value);
   free_list_.Push(node);

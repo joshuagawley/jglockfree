@@ -2,11 +2,14 @@ include(GNUInstallDirs)
 
 add_library(jglockfree INTERFACE)
 
-target_sources(jglockfree INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/queue.h ${CMAKE_CURRENT_SOURCE_DIR}/hazard_pointer.h ${CMAKE_CURRENT_SOURCE_DIR}/spsc.h)
-
-target_include_directories(jglockfree INTERFACE
-    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/..>
-    $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
+target_sources(jglockfree
+    INTERFACE FILE_SET HEADERS
+    BASE_DIRS ${CMAKE_CURRENT_SOURCE_DIR}/..
+    FILES
+        config.h
+        hazard_pointer.h
+        queue.h
+        spsc.h
 )
 
 target_link_libraries(jglockfree INTERFACE project_settings)

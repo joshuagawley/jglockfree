@@ -171,7 +171,7 @@ TEST(HazardPointerTest, DelayedReader) {
 
 TEST(HazardPointerTest, SlotExhaustionThrows) {
   // Use a small slot count to make exhaustion testable
-  using SmallHP = jglockfree::HazardPointer<4>;
+  using SmallHP = jglockfree::HazardPointerN<4>;
 
   std::vector<std::unique_ptr<SmallHP>> hps;
 
@@ -188,7 +188,7 @@ TEST(HazardPointerTest, SlotExhaustionThrows) {
 }
 
 TEST(HazardPointerTest, SlotReuseAfterDestruction) {
-  using SmallHP = jglockfree::HazardPointer<4>;
+  using SmallHP = jglockfree::HazardPointerN<4>;
 
   // Allocate all 4 slots
   {
@@ -208,7 +208,7 @@ TEST(HazardPointerTest, SlotReuseAfterDestruction) {
 }
 
 TEST(HazardPointerTest, PartialSlotReuse) {
-  using SmallHP = jglockfree::HazardPointer<4>;
+  using SmallHP = jglockfree::HazardPointerN<4>;
 
   auto hp1 = std::make_unique<SmallHP>();
   auto hp2 = std::make_unique<SmallHP>();
@@ -227,7 +227,7 @@ TEST(HazardPointerTest, PartialSlotReuse) {
 }
 
 TEST(HazardPointerTest, SlotExhaustionMultithreaded) {
-  using SmallHP = jglockfree::HazardPointer<8>;
+  using SmallHP = jglockfree::HazardPointerN<8>;
 
   std::atomic<int> successful_allocations{0};
   std::atomic<int> failed_allocations{0};

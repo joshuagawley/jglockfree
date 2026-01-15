@@ -1,18 +1,19 @@
 // SPDX-License-Identifier: MIT
 
-#ifndef JGLOCKFREE_SPSC_H
-#define JGLOCKFREE_SPSC_H
+#ifndef JGLOCKFREE_SPSC_H_
+#define JGLOCKFREE_SPSC_H_
 
 #include <array>
 #include <atomic>
 #include <condition_variable>
 #include <mutex>
-#include <new>
 #include <optional>
 
 #if defined(__x86_64__)
 #include <immintrin.h>  // for _mm_pause
 #endif
+
+#include <jglockfree/config.h>
 
 namespace jglockfree {
 
@@ -22,8 +23,9 @@ namespace jglockfree {
  *
  * @tparam T The type of elements stored in the queue.
  * @tparam NumSlots The maximum number of elements the queue can hold.
+ * @tparam Traits The traits class providing configuration constants.
  */
-template <typename T, std::size_t NumSlots>
+template <typename T, std::size_t NumSlots, typename Traits = DefaultTraits>
 class SpscQueue {
  public:
   SpscQueue() : head_{0}, tail_{0} {}
@@ -90,21 +92,21 @@ class SpscQueue {
   [[nodiscard]] constexpr auto TryDequeueUnsignalled() -> std::optional<T>;
 
  private:
-  alignas(std::hardware_destructive_interference_size)
+  alignas(Traits::kCacheLineSize)
       std::array<T, NumSlots + 1> slots_;
-  alignas(std::hardware_destructive_interference_size)
+  alignas(Traits::kCacheLineSize)
       std::atomic<std::size_t> head_;
-  alignas(std::hardware_destructive_interference_size)
+  alignas(Traits::kCacheLineSize)
       std::atomic<std::size_t> tail_;
-  alignas(std::hardware_destructive_interference_size) std::condition_variable
+  alignas(Traits::kCacheLineSize) std::condition_variable
       not_empty_;
-  alignas(std::hardware_destructive_interference_size)
+  alignas(Traits::kCacheLineSize)
       std::condition_variable not_full_;
-  alignas(std::hardware_destructive_interference_size) std::mutex mutex_;
+  alignas(Traits::kCacheLineSize) std::mutex mutex_;
 };
 
-template <typename T, std::size_t NumSlots>
-constexpr bool SpscQueue<T, NumSlots>::TryEnqueueUnsignalled(T value) {
+template <typename T, std::size_t NumSlots, typename Traits>
+constexpr bool SpscQueue<T, NumSlots, Traits>::TryEnqueueUnsignalled(T value) {
   const auto head = head_.load(std::memory_order_acquire);
   const auto tail = tail_.load(std::memory_order_relaxed);
   const auto new_tail = (tail + 1) % (NumSlots + 1);
@@ -119,8 +121,8 @@ constexpr bool SpscQueue<T, NumSlots>::TryEnqueueUnsignalled(T value) {
   }
 }
 
-template <typename T, std::size_t NumSlots>
-bool SpscQueue<T, NumSlots>::TryEnqueue(T value) {
+template <typename T, std::size_t NumSlots, typename Traits>
+bool SpscQueue<T, NumSlots, Traits>::TryEnqueue(T value) {
   const bool success = TryEnqueueUnsignalled(std::move(value));
   if (success) {
     std::lock_guard<std::mutex> lock{mutex_};
@@ -129,18 +131,18 @@ bool SpscQueue<T, NumSlots>::TryEnqueue(T value) {
   return success;
 }
 
-template <typename T, std::size_t NumSlots>
-void SpscQueue<T, NumSlots>::Enqueue(T value) {
+template <typename T, std::size_t NumSlots, typename Traits>
+void SpscQueue<T, NumSlots, Traits>::Enqueue(T value) {
   // Fast path: spin for a bit
   for (int i = 0; i < 1000; ++i) {
-    // We can't use TryEnqueueUnsignalled because it consumes the value, so
-    // inline the logic
+    // We can't use TryEnqueueUnsignalled because it consumes the value,
+    // so inline the logic
     const auto head = head_.load(std::memory_order_acquire);
     const auto tail = tail_.load(std::memory_order_relaxed);
     const auto new_tail = (tail + 1) % (NumSlots + 1);
 
     if (new_tail != head) {
-      // Space available—now we can move
+      // Space available, now we can move
       slots_[tail] = std::move(value);
       tail_.store(new_tail, std::memory_order_release);
       not_empty_.notify_one();
@@ -171,8 +173,8 @@ void SpscQueue<T, NumSlots>::Enqueue(T value) {
   not_empty_.notify_one();
 }
 
-template <typename T, std::size_t NumSlots>
-constexpr std::optional<T> SpscQueue<T, NumSlots>::TryDequeueUnsignalled() {
+template <typename T, std::size_t NumSlots, typename Traits>
+constexpr std::optional<T> SpscQueue<T, NumSlots, Traits>::TryDequeueUnsignalled() {
   const auto head = head_.load(std::memory_order_relaxed);
   const auto tail = tail_.load(std::memory_order_acquire);
 
@@ -187,8 +189,8 @@ constexpr std::optional<T> SpscQueue<T, NumSlots>::TryDequeueUnsignalled() {
   }
 }
 
-template <typename T, std::size_t NumSlots>
-std::optional<T> SpscQueue<T, NumSlots>::TryDequeue() {
+template <typename T, std::size_t NumSlots, typename Traits>
+std::optional<T> SpscQueue<T, NumSlots, Traits>::TryDequeue() {
   auto result = TryDequeueUnsignalled();
   if (result.has_value()) {
     std::lock_guard<std::mutex> lock{mutex_};
@@ -197,10 +199,10 @@ std::optional<T> SpscQueue<T, NumSlots>::TryDequeue() {
   return result;
 }
 
-template <typename T, std::size_t NumSlots>
-T SpscQueue<T, NumSlots>::Dequeue() {
+template <typename T, std::size_t NumSlots, typename Traits>
+T SpscQueue<T, NumSlots, Traits>::Dequeue() {
   // Fast path: spin for a bit
-  for (int i = 0; i < 1000; ++i) {
+  for (int i = 0; i < Traits::kSpinCount; ++i) {
     auto result = TryDequeueUnsignalled();
     if (result.has_value()) {
       not_full_.notify_one();
@@ -228,4 +230,4 @@ T SpscQueue<T, NumSlots>::Dequeue() {
 
 }  // namespace jglockfree
 
-#endif  // JGLOCKFREE_SPSC_H
+#endif  // JGLOCKFREE_SPSC_H_

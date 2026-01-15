@@ -4,9 +4,8 @@
 #define JGLOCKFREE_HAZARD_POINTER_H_
 
 #include <mutex>
-#include <new>
-#include <ranges>
-#include <unordered_set>
+
+#include <jglockfree/config.h>
 
 namespace jglockfree {
 
@@ -23,9 +22,14 @@ struct RetiredNode {
  * @brief
  * @details
  *
+ * @tparam Traits The traits class providing configuration constants such as
+ *         cache line size and default slot count.
  * @tparam NumSlots The maximum number of hazard pointer slots available.
+ *         Defaults to `Traits::kDefaultHazardSlots`.
+ *
+ * @see HazardPointerN For a convenience alias when using DefaultTraits.
  */
-template <std::size_t NumSlots = 128>
+template <typename Traits = DefaultTraits, std::size_t NumSlots = Traits::kDefaultHazardSlots>
 class HazardPointer {
  public:
   /**
@@ -92,12 +96,12 @@ class HazardPointer {
   thread_local static inline std::vector<RetiredNode> retired_;
   static constexpr std::size_t kRetireThreshold = 2 * NumSlots;
 
-  alignas(std::hardware_destructive_interference_size) std::atomic<void *> *slot_{nullptr};
+  alignas(Traits::kCacheLineSize) std::atomic<void *> *slot_{nullptr};
   std::size_t slot_index_{};
 };
 
-template <std::size_t NumSlots>
-HazardPointer<NumSlots>::HazardPointer() {
+template <typename Traits, std::size_t NumSlots>
+HazardPointer<Traits, NumSlots>::HazardPointer() {
   {
     std::lock_guard lock{free_list_guard_};
     if (not free_list_.empty()) {
@@ -113,16 +117,16 @@ HazardPointer<NumSlots>::HazardPointer() {
   slot_ = &slots_[slot_index_];
 }
 
-template <std::size_t NumSlots>
-HazardPointer<NumSlots>::~HazardPointer() noexcept {
+template <typename Traits, std::size_t NumSlots>
+HazardPointer<Traits, NumSlots>::~HazardPointer() noexcept {
   Clear();
   std::lock_guard lock{free_list_guard_};
   free_list_.push_back(slot_index_);
 }
 
-template <std::size_t NumSlots>
+template <typename Traits, std::size_t NumSlots>
 template <typename T>
-constexpr T *HazardPointer<NumSlots>::Protect(
+constexpr T *HazardPointer<Traits, NumSlots>::Protect(
     std::atomic<T *> &source) noexcept {
   while (true) {
     const auto ptr = source.load(std::memory_order_acquire);
@@ -134,14 +138,14 @@ constexpr T *HazardPointer<NumSlots>::Protect(
   }
 }
 
-template <std::size_t NumSlots>
-constexpr void HazardPointer<NumSlots>::Clear() noexcept {
+template <typename Traits, std::size_t NumSlots>
+constexpr void HazardPointer<Traits, NumSlots>::Clear() noexcept {
   slot_->store(nullptr, std::memory_order_release);
 }
 
-template <std::size_t NumSlots>
+template <typename Traits, std::size_t NumSlots>
 template <typename T>
-constexpr bool HazardPointer<NumSlots>::IsProtected(T *ptr) noexcept {
+constexpr bool HazardPointer<Traits, NumSlots>::IsProtected(T *ptr) noexcept {
   const auto count = next_slot_.load(std::memory_order_acquire);
   for (auto i = std::size_t{0}; i < count; ++i) {
     if (slots_[i].load(std::memory_order_acquire) == ptr) {
@@ -152,17 +156,17 @@ constexpr bool HazardPointer<NumSlots>::IsProtected(T *ptr) noexcept {
   return false;
 }
 
-template <std::size_t NumSlots>
+template <typename Traits, std::size_t NumSlots>
 template <typename T, typename Deleter>
-constexpr void HazardPointer<NumSlots>::Retire(T *ptr, Deleter deleter) {
+constexpr void HazardPointer<Traits, NumSlots>::Retire(T *ptr, Deleter deleter) {
   retired_.emplace_back(ptr, deleter);
   if (retired_.size() >= kRetireThreshold) {
     Scan();
   }
 }
 
-template <std::size_t NumSlots>
-constexpr void HazardPointer<NumSlots>::Scan() {
+template <typename Traits, std::size_t NumSlots>
+constexpr void HazardPointer<Traits, NumSlots>::Scan() {
   const auto count = next_slot_.load(std::memory_order_acquire);
 
   std::array<void *, NumSlots> protected_ptrs{};
@@ -180,6 +184,19 @@ constexpr void HazardPointer<NumSlots>::Scan() {
     return true;
   });
 }
+
+/**
+ * @brief Convenience alias for HazardPointer with a custom slot count.
+ * @details Provides a simpler syntax for specifying the number of hazard pointer
+ *          slots while using DefaultTraits. Equivalent to
+ *          `HazardPointer<DefaultTraits, NumSlots>`.
+ *
+ * @tparam NumSlots The maximum number of hazard pointer slots available.
+ *
+ * @see HazardPointer
+ */
+template <std::size_t NumSlots>
+using HazardPointerN = HazardPointer<DefaultTraits, NumSlots>;
 
 }  // namespace jglockfree
 
