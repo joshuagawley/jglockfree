@@ -240,7 +240,7 @@ TEST(HazardPointerTest, SlotExhaustionMultithreaded) {
 
   for (std::size_t i = 0; i < kThreads; ++i) {
     threads.emplace_back([&] {
-      while (!start.load(std::memory_order_acquire)) {
+      while (not start.load(std::memory_order_acquire)) {
         std::this_thread::yield();
       }
 

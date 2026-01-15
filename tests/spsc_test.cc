@@ -383,7 +383,7 @@ TEST(SpscQueueBlockingTest, BlockingDequeueWaitsForItem) {
   });
 
   // Wait for consumer to start and block
-  while (!consumer_started.load(std::memory_order_acquire)) {
+  while (not consumer_started.load(std::memory_order_acquire)) {
     std::this_thread::yield();
   }
   std::this_thread::sleep_for(10ms);  // Give consumer time to actually block
@@ -417,7 +417,7 @@ TEST(SpscQueueBlockingTest, BlockingEnqueueWaitsForSpace) {
   });
 
   // Wait for producer to start and block
-  while (!producer_started.load(std::memory_order_acquire)) {
+  while (not producer_started.load(std::memory_order_acquire)) {
     std::this_thread::yield();
   }
   std::this_thread::sleep_for(10ms);  // Give producer time to actually block
@@ -785,7 +785,7 @@ TEST(SpscQueueTest, NonPowerOfTwoSize_ConcurrentWrapAround) {
 
   std::thread producer([&] {
     for (std::size_t i = 0; i < kNumItems; ++i) {
-      while (!queue.TryEnqueue(std::move(i))) {
+      while (not queue.TryEnqueue(std::move(i))) {
         std::this_thread::yield();
       }
     }
