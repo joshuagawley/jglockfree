@@ -226,7 +226,14 @@ template <typename T, typename Traits>
 Queue<T, Traits>::Node *Queue<T, Traits>::AllocateNode(T value) {
  auto *node = free_list_.Pop();
   if (node != nullptr) {
-    std::construct_at(&node->value, std::move(value));
+    try {
+      std::construct_at(&node->value, std::move(value));
+    } catch (...) {
+      // if constructing the value failed, node->value is still uninitialized
+      // so push it back into the free list and rethrow the exception
+      free_list_.Push(node);
+      throw;
+    }
   } else {
     node = new Node(std::move(value));
   }
