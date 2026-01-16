@@ -74,10 +74,10 @@ and the latency growth as we increase the number of threads is similar with 256 
 
 | Threads | 256 Slots | 1024 Slots |
 |---------|-----------|------------|
-| 1       | 39.8 ns   | 41.6 ns    |
-| 2       | 78.7 ns   | 80.8 ns    |
-| 4       | 322 ns    | 276 ns     |
-| 8       | 815 ns    | 781 ns     |
+| 1       | 19.0 ns   | 19.0 ns    |
+| 2       | 55.8 ns   | 57.9 ns    |
+| 4       | 132 ns    | 139 ns     |
+| 8       | 421 ns    | 439 ns     |
 
 We also align each hazard pointer slot to a cache line to avoid false sharing; this improves 
 latency by 7%.
@@ -127,16 +127,21 @@ The consumer follows the inverse pattern; loading `tail_` with acquire and stori
 Using relaxed ordering here would allow the CPU to reorder operations such that a reader sees the updated index before
 the data is written, and therefore the reader would read uninitialized memory.
 
-### Blocking variants
-The blocking `Enqueue()` and `Dequeue()` methods use an adaptive spin-then-block strategy; they spin for 1000 iterations
-attempting the lock-free path, then fall back to a mutex-based path if the lock-free path fails.
+## Blocking variants
+The blocking `Enqueue()` and `Dequeue()` methods use `std::atomic::wait()` and `std::atomic::notify_one()` directly on
+the head and tail indices, eliminating the need for condition variables and a mutex.
+This simplifies the code and lowers the blocking-path overhead.
+
+### Adaptive spin-then-block
+Before blocking, both `Enqueue()` and `Dequeue()` spin for a configurable number of iterations (the default is 1000)
+attempting the lock-free path.
 This optimizes for short waits while remaining efficient for long waits.
-The spin loop includes architecture-specific pause hints (`yield` on ARM, `pause` on x86).
+We use architecture-specific spin-loop hints (`yield` on ARM, `pause` on x86).
 
 ### Signaling overhead
-To support mixing blocking and non-blocking callers, `TryEnqueue()` and `TryDequeue()` signal condition variables on
-success.
-This roughly halves throughput compared to the raw lock-free path.
+To support mixing blocking and non-blocking callers, `TryEnqueue()` and `TryDequeue()` call `notify_one()` on success.
+This adds approximately 15ns per operation on an Apple M1 processor, reducing throughput from 40M to 25M items per
+second.
 For maximum performance when blocking is not needed, use `TryEnqueueUnsignalled()` and `TryDequeueUnsignalled()`.
 
 ### Uninitalized storage
@@ -154,10 +159,10 @@ We first compare the performance of the lock-free queue with the mutex-based que
 
 | Threads | Lock-Free Enqueue | Mutex Enqueue | Lock-Free Mixed | Mutex Mixed |
 |---------|-------------------|---------------|-----------------|-------------|
-| 1       | 17.5 ns           | 9.60 ns       | 17.6 ns         | 9.90 ns     |
-| 2       | 80.5 ns           | 34.6 ns       | 32.0 ns         | 35.7 ns     |
-| 4       | 284 ns            | 88.0 ns       | 103 ns          | 107 ns      |
-| 8       | 1305 ns           | 276 ns        | 415 ns          | 269 ns      |
+| 1       | 17.1 ns           | 9.58 ns       | 17.7 ns         | 9.80 ns     |
+| 2       | 78.7 ns           | 26.8 ns       | 28.7 ns         | 25.8 ns     |
+| 4       | 290 ns            | 70.1 ns       | 97.3 ns         | 68.7 ns     |
+| 8       | 1247 ns           | 219 ns        | 370 ns          | 186 ns      |
 
 The lock-free queue is generally less performant than the mutex-based queue. This is due to the following reasons:
 - The lock-free queue includes hazard pointer overhead: sequentially consistent memory ordering on every protect
@@ -181,27 +186,27 @@ We compare sustained throughput (measured in items per second) across all three 
 
 | Queue                | Throughput       | Time per item |
 |----------------------|------------------|---------------|
-| SPSC unsignalled     | 39.6M items/sec  | ~25 ns        |
-| M&S lock-free        | 36.5M items/sec  | ~27 ns        |
-| Mutex                | 34.6M items/sec  | ~29 ns        |
-| SPSC with signalling | 20.1M items/sec  | ~50 ns        |
-
+| SPSC unsignalled     | 39.5M items/sec  | ~25 ns        |
+| M&S lock-free        | 36.9M items/sec  | ~27 ns        |
+| Mutex                | 33.6M items/sec  | ~30 ns        |
+| SPSC with signalling | 25.0M items/sec  | ~40 ns        |
 
 The M&S queue and unsignalled SPSC queue are the best performing implementations, both beating the mutex queue on
 throughput.
-The condition variable signaling overhead reduces throughput by roughly 50%.
+The `notify_one()` signaling overhead reduces throughput by roughly 37%.
 
 ### Tail latency
 While the lock-free queue has lower throughput than the mutex queue, it provides better tail latency under contention.
 At 8 threads (mixed enqueue/dequeue workload):
 
-| Percentile | Lock-Free | Mutex    |
-|------------|-----------|----------|
-| p50        | 4.1 µs    | 3.6 µs   |
-| p99        | 7.8 µs    | 54.3 µs  |
-| p999       | 70.8 µs   | 184.5 µs |
+| Percentile | Lock-Free | Mutex     |
+|------------|-----------|-----------|
+| p50        | 4.1 µs    | 3.5 µs    |
+| p99        | 7.7 µs    | 54.1 µs   |
+| p999       | 69.3 µs   | 153.3 µs  |
 
-The lock-free queue's 99th percentile latency is 7 times lower because no thread can block another; 
+
+The lock-free queue's 99th percentile latency is approximately 7 times lower because no thread can block another; 
 contention results in CAS retries rather than blocking.
 
 For latency-sensitive applications where 99th percentile tail latency matters more than throughput, the lock-free
