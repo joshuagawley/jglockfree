@@ -6,7 +6,6 @@
 #include <jglockfree/config.h>
 #include <jglockfree/hazard_pointer.h>
 
-
 #include <atomic>
 #include <cstddef>
 #include <memory>
@@ -30,9 +29,13 @@ class FreeList {
 
   auto Push(Node *node) -> void;
   auto Pop() -> Node *;
+  [[nodiscard]] auto get_count() const noexcept -> std::size_t {
+    return count_;
+  }
 
  private:
   alignas(Traits::kCacheLineSize) std::atomic<Node *> head_{nullptr};
+  std::size_t count_{0};
 };
 
 template <typename Node, typename Traits>
@@ -100,6 +103,8 @@ class Queue {
 
   alignas(Traits::kCacheLineSize) std::atomic<Node *> head_;
   alignas(Traits::kCacheLineSize) std::atomic<Node *> tail_;
+  static inline std::vector<Node *> global_free_list_;
+  static inline std::mutex global_free_list_guard_{};
   static thread_local FreeList<Node, Traits> free_list_;
 };
 
@@ -202,6 +207,24 @@ template <typename T, typename Traits>
   requires std::is_nothrow_move_constructible_v<T>
 Queue<T, Traits>::Node *Queue<T, Traits>::AllocateNode(T value) {
   Node *node = free_list_.Pop();
+  if (node == nullptr) {
+    std::lock_guard lock{global_free_list_guard_};
+    constexpr int kBatchSize = 32;
+    int items_moved = 0;
+
+    while (items_moved < kBatchSize && global_free_list_.size() > 0) {
+      Node *from_global = global_free_list_.back();
+      global_free_list_.pop_back();
+
+      free_list_.Push(from_global);
+      ++items_moved;
+    }
+
+    if (items_moved > 0) {
+      node = free_list_.Pop();
+    }
+  }
+
   if (node != nullptr) {
     try {
       std::construct_at(&node->value, std::move(value));
@@ -224,6 +247,20 @@ void Queue<T, Traits>::RecycleNode(void *ptr) {
   auto node = static_cast<Node *>(ptr);
   std::destroy_at(&node->value);
   free_list_.Push(node);
+
+  constexpr std::size_t kMaxLocalSize = 64;
+  constexpr int kBatchSize = 32;
+
+  if (free_list_.get_count() > kMaxLocalSize) {
+    std::lock_guard lock{global_free_list_guard_};
+
+    for (int i = 0; i < kBatchSize; ++i) {
+      Node *to_return = free_list_.Pop();
+      if (to_return != nullptr) {
+        global_free_list_.push_back(to_return);
+      }
+    }
+  }
 }
 
 }  // namespace jglockfree
