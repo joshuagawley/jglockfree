@@ -171,8 +171,8 @@ so threads rarely end up in contention.
 We mitigate false sharing by using `alignas(std::hardware_destructive_interference_size)` on the head and tail of the
 queue to place them on separate cache lines.
 
-Lock-free queues still confer advantages such as non-blocking guarantees, lack of priority inversion, and bounded 
-worst-case latency per operation (no thread can block another indefinitely).
+Lock-free queues still confer advantages such as non-blocking guarantees, lack of priority inversion, and guaranteed
+progress with obstruction-free properties for single threads
 
 ### SPSC vs M&S queue
 Now we compare the performance of the two queues above with the SPSC queue.
