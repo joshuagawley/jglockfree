@@ -3,16 +3,19 @@
 #ifndef JGLOCKFREE_SPSC_H_
 #define JGLOCKFREE_SPSC_H_
 
+#include <jglockfree/config.h>
+
 #include <array>
 #include <atomic>
+#include <cstddef>
+#include <memory>
 #include <optional>
+#include <utility>
 #include <variant>
 
 #if defined(__x86_64__)
 #include <immintrin.h>  // for _mm_pause
 #endif
-
-#include <jglockfree/config.h>
 
 namespace jglockfree {
 

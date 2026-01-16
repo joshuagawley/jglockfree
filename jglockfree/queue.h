@@ -6,8 +6,13 @@
 #include <jglockfree/config.h>
 #include <jglockfree/hazard_pointer.h>
 
+
 #include <atomic>
+#include <cstddef>
+#include <memory>
 #include <optional>
+#include <type_traits>
+#include <utility>
 
 namespace jglockfree {
 

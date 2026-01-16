@@ -6,8 +6,13 @@
 #include <jglockfree/config.h>
 
 #include <algorithm>
+#include <array>
+#include <atomic>
+#include <cstddef>
+#include <functional>
 #include <mutex>
 #include <stdexcept>
+#include <vector>
 
 namespace jglockfree {
 

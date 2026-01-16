@@ -3,6 +3,7 @@
 #ifndef JGLOCKFREE_CONFIG_H_
 #define JGLOCKFREE_CONFIG_H_
 
+#include <cstddef>
 #include <new>
 
 namespace jglockfree {
