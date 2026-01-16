@@ -39,7 +39,7 @@ class SpscQueue {
 
  private:
   union Slot {
-    constexpr Slot() noexcept: empty() {}
+    constexpr Slot() noexcept : empty() {}
     ~Slot() noexcept {};
 
     T value;
