@@ -133,6 +133,9 @@ BENCHMARK_TEMPLATE_DEFINE_F(HazardSlotFixture, MixedWorkload1024, 1024)(benchmar
 
 class QueueFixture : public benchmark::Fixture {
  public:
+  using benchmark::Fixture::SetUp;
+  using benchmark::Fixture::TearDown;
+
   jglockfree::Queue<int> lock_free_queue;
   MutexQueue<int> mutex_queue;
 
@@ -148,6 +151,9 @@ class QueueFixture : public benchmark::Fixture {
 
 class SpscFixture : public benchmark::Fixture {
  public:
+  using benchmark::Fixture::SetUp;
+  using benchmark::Fixture::TearDown;
+
   static constexpr std::size_t kQueueSize = 1024;
   jglockfree::SpscQueue<int, kQueueSize> spsc_queue;
   std::unique_ptr<std::barrier<>> sync_barrier;
@@ -379,7 +385,7 @@ BENCHMARK_DEFINE_F(SpscFixture, SpscTryPaired)(benchmark::State &state) {
   for (auto _ : state) {
     if (state.thread_index() == 0) {
       // Producer: enqueue then signal
-      auto _ = spsc_queue.TryEnqueue(42);
+      (void)spsc_queue.TryEnqueue(42);
       sync_barrier->arrive_and_wait();  // Item is ready
       sync_barrier->arrive_and_wait();  // Wait for consumer
     } else {
@@ -486,14 +492,14 @@ BENCHMARK_DEFINE_F(SpscFixture, SpscTryDequeueOnly)(benchmark::State &state) {
 
   // Pre-fill with one item before starting
   if (state.thread_index() == 0) {
-    auto _ = spsc_queue.TryEnqueue(42);
+    (void)spsc_queue.TryEnqueue(42);
   }
 
   for (auto _ : state) {
     if (state.thread_index() == 0) {
       // Producer: just refill, don't measure
       state.PauseTiming();
-      auto _ = spsc_queue.TryEnqueue(42);
+      (void)spsc_queue.TryEnqueue(42);
       state.ResumeTiming();
       sync_barrier->arrive_and_wait();
     } else {
@@ -514,14 +520,14 @@ BENCHMARK_DEFINE_F(SpscFixture, SpscBlockingDequeueOnly)(benchmark::State &state
 
   // Pre-fill with one item before starting
   if (state.thread_index() == 0) {
-    auto _ = spsc_queue.TryEnqueue(42);
+    (void)spsc_queue.TryEnqueue(42);
   }
 
   for (auto _ : state) {
     if (state.thread_index() == 0) {
       // Producer: just refill, don't measure
       state.PauseTiming();
-      auto _ = spsc_queue.TryEnqueue(42);
+      (void)spsc_queue.TryEnqueue(42);
       state.ResumeTiming();
       sync_barrier->arrive_and_wait();
     } else {

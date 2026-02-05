@@ -9,12 +9,10 @@
 namespace jglockfree {
 
 struct DefaultTraits {
-#ifdef __cpp_lib_hardware_interference_size
-  static constexpr std::size_t kCacheLineSize =
-      std::hardware_destructive_interference_size;
-#else
+  // Use a fixed cache line size to avoid GCC's -Winterference-size warning.
+  // std::hardware_destructive_interference_size can vary between compiler
+  // versions and CPU tuning flags, making it unsuitable for ABI-stable code.
   static constexpr std::size_t kCacheLineSize = 64;
-#endif
 
   static constexpr int kSpinCount = 1000;
   static constexpr int kDefaultHazardSlots = 128;

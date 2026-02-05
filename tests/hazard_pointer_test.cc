@@ -46,7 +46,7 @@ TEST(HazardPointerTest, IsProtectedReturnsTrueForProtectedPointer) {
   std::atomic<int *> source{&node};
 
   jglockfree::HazardPointer hp;
-  auto _ = hp.Protect(source);
+  (void)hp.Protect(source);
 
   EXPECT_TRUE(jglockfree::HazardPointer<>::IsProtected(&node));
   hp.Clear();
@@ -57,7 +57,7 @@ TEST(HazardPointerTest, IsProtectedReturnsFalseAfterClear) {
   std::atomic<int *> source{&node};
 
   jglockfree::HazardPointer hp;
-  auto _ = hp.Protect(source);
+  (void)hp.Protect(source);
   hp.Clear();
 
   EXPECT_FALSE(jglockfree::HazardPointer<>::IsProtected(&node));
@@ -69,7 +69,7 @@ TEST(HazardPointerTest, IsProtectedReturnsFalseForUnprotectedPointer) {
   std::atomic<int *> source{&node_a};
 
   jglockfree::HazardPointer hp;
-  auto _ = hp.Protect(source);
+  (void)hp.Protect(source);
 
   EXPECT_FALSE(jglockfree::HazardPointer<>::IsProtected(&node_b));
   hp.Clear();
@@ -80,7 +80,7 @@ TEST(HazardPointerTest, ClearIsIdempotent) {
   std::atomic<int *> source{&node};
 
   jglockfree::HazardPointer hp;
-  auto _ = hp.Protect(source);
+  (void)hp.Protect(source);
   hp.Clear();
   hp.Clear();  // Should not crash or misbehave
 
@@ -133,7 +133,7 @@ TEST(HazardPointerTest, StressRetirement) {
     threads.emplace_back([&queue, t] {
       for (std::size_t i = 0; i < kOpsPerThread; ++i) {
         queue.Enqueue(t * kOpsPerThread + i);
-        auto _ = queue.Dequeue();
+        (void)queue.Dequeue();
       }
     });
   }

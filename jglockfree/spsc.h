@@ -47,7 +47,8 @@ class SpscQueue {
     std::monostate empty;
   };
 
-  alignas(Traits::kCacheLineSize) std::array<Slot, NumSlots + 1> slots_;
+  alignas(Traits::kCacheLineSize)
+      std::array<Slot, static_cast<std::size_t>(NumSlots) + 1> slots_;
   alignas(Traits::kCacheLineSize) std::atomic<std::size_t> head_;
   alignas(Traits::kCacheLineSize) std::atomic<std::size_t> tail_;
 };

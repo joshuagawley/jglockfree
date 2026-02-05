@@ -94,8 +94,8 @@ class Queue {
     std::atomic<Node *> next;
 
     constexpr Node() noexcept : value(std::nullopt), next(nullptr) {}
-    explicit constexpr Node(T value) noexcept
-        : value(std::move(value)), next(nullptr) {}
+    explicit constexpr Node(T val) noexcept
+        : value(std::move(val)), next(nullptr) {}
   };
 
   auto AllocateNode(T value) -> Node *;
