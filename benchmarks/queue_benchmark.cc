@@ -291,6 +291,53 @@ BENCHMARK_DEFINE_F(QueueFixture, MutexThroughput)(benchmark::State &state) {
   state.SetItemsProcessed(state.iterations() * kItemsPerIteration);
 }
 
+// ============================================================================
+// Free List Recycling Throughput Benchmark
+//
+// Measures steady-state throughput after free lists are warmed up.
+// With working rebalancing (count_ maintained in FreeList), nodes flow
+// from consumer's local list → global list → producer's local list,
+// avoiding new/delete in the hot path.
+// ============================================================================
+
+// clang-format off
+BENCHMARK_DEFINE_F(QueueFixture, FreeListRecyclingThroughput)(benchmark::State &state) {
+  // clang-format on
+  if (state.threads() != 2) {
+    state.SkipWithError("Recycling benchmark requires exactly 2 threads");
+    return;
+  }
+
+  constexpr int kItemsPerIteration = 10'000;
+
+  // Warm-up: populate free lists so the measured phase reuses nodes
+  if (state.thread_index() == 0) {
+    for (int i = 0; i < kItemsPerIteration; ++i) {
+      lock_free_queue.Enqueue(i);
+    }
+  } else {
+    for (int i = 0; i < kItemsPerIteration; ++i) {
+      while (not lock_free_queue.Dequeue().has_value()) {
+      }
+    }
+  }
+
+  for (auto _ : state) {
+    if (state.thread_index() == 0) {
+      for (int i = 0; i < kItemsPerIteration; ++i) {
+        lock_free_queue.Enqueue(i);
+      }
+    } else {
+      for (int i = 0; i < kItemsPerIteration; ++i) {
+        while (not lock_free_queue.Dequeue().has_value()) {
+        }
+      }
+    }
+  }
+
+  state.SetItemsProcessed(state.iterations() * kItemsPerIteration);
+}
+
 // clang-format off
 BENCHMARK_DEFINE_F(QueueFixture, LockFreeLatencyDistribution)(benchmark::State &state) {
   // clang-format on
@@ -728,5 +775,6 @@ BENCHMARK_REGISTER_F(SpscFixture, SpscBlockingDequeueOnly)->Threads(2);
 
 BENCHMARK_REGISTER_F(QueueFixture, LockFreeThroughput)->Threads(2);
 BENCHMARK_REGISTER_F(QueueFixture, MutexThroughput)->Threads(2);
+BENCHMARK_REGISTER_F(QueueFixture, FreeListRecyclingThroughput)->Threads(2);
 BENCHMARK_REGISTER_F(SpscFixture, SpscThroughput)->Threads(2);
 BENCHMARK_REGISTER_F(SpscFixture, SpscThroughputInternal)->Threads(2);
