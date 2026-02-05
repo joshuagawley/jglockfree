@@ -3,7 +3,75 @@
 #include <gtest/gtest.h>
 #include <jglockfree/queue.h>
 
+#include <atomic>
 #include <thread>
+
+namespace {
+
+struct TestNode {
+  std::atomic<TestNode *> next{nullptr};
+};
+
+}  // namespace
+
+TEST(FreeListTest, CountStartsAtZero) {
+  const jglockfree::FreeList<TestNode> list;
+  EXPECT_EQ(list.get_count(), 0);
+}
+
+TEST(FreeListTest, CountTracksOperations) {
+  jglockfree::FreeList<TestNode> list;
+  constexpr int kNumNodes = 10;
+
+  std::vector<TestNode *> nodes;
+  nodes.reserve(kNumNodes);
+  for (int i = 0; i < kNumNodes; ++i) {
+    nodes.push_back(new TestNode{});
+  }
+
+  // Push all nodes
+  for (std::size_t i = 0; i < kNumNodes; ++i) {
+    list.Push(nodes[i]);
+    EXPECT_EQ(list.get_count(), i + 1);
+  }
+
+  // Pop half
+  for (std::size_t i = 0; i < kNumNodes / 2; ++i) {
+    TestNode *node = list.Pop();
+    EXPECT_NE(node, nullptr);
+    EXPECT_EQ(list.get_count(), kNumNodes - i - 1);
+  }
+
+  // Pop remainder
+  for (std::size_t i = kNumNodes / 2; i < kNumNodes; ++i) {
+    TestNode *node = list.Pop();
+    EXPECT_NE(node, nullptr);
+    EXPECT_EQ(list.get_count(), kNumNodes - i - 1);
+  }
+
+  EXPECT_EQ(list.get_count(), 0);
+  // FreeList destructor will delete remaining nodes (none left)
+}
+
+TEST(FreeListTest, PopFromEmptyReturnsNullAndKeepsCountZero) {
+  jglockfree::FreeList<TestNode> list;
+  EXPECT_EQ(list.Pop(), nullptr);
+  EXPECT_EQ(list.get_count(), 0);
+
+  // Push one, pop it, then pop again from empty
+  auto *node = new TestNode{};
+  list.Push(node);
+  EXPECT_EQ(list.get_count(), 1);
+
+  TestNode *popped = list.Pop();
+  EXPECT_NE(popped, nullptr);
+  EXPECT_EQ(list.get_count(), 0);
+
+  EXPECT_EQ(list.Pop(), nullptr);
+  EXPECT_EQ(list.get_count(), 0);
+
+  delete popped;
+}
 
 TEST(QueueTest, EmptyQueueReturnsNullopt) {
   jglockfree::Queue<int> queue{};
@@ -54,7 +122,7 @@ TEST(QueueTest, ConcurrentEnqueueDequeue) {
 
   for (std::size_t c = 0; c < kNumConsumers; ++c) {
     consumers.emplace_back([&queue, &total_dequeued] {
-      while (auto _ = queue.Dequeue()) {
+      while (queue.Dequeue()) {
         total_dequeued.fetch_add(1, std::memory_order_relaxed);
       }
     });
@@ -65,6 +133,44 @@ TEST(QueueTest, ConcurrentEnqueueDequeue) {
   }
 
   EXPECT_EQ(total_dequeued.load(), kNumProducers * kItemsPerProducer);
+}
+
+// Exercises the spill-to-global and refill-from-global free list paths.
+// Unlike ConcurrentEnqueueDequeue (where producers finish before consumers
+// start), this test runs producer and consumer simultaneously, forcing nodes
+// to flow: consumer local list → global list → producer local list.
+TEST(QueueTest, ConcurrentProducerConsumerRecycling) {
+  jglockfree::Queue<int> queue{};
+  constexpr int kTotalItems = 500'000;
+
+  std::atomic<bool> producer_done{false};
+  std::atomic<std::size_t> total_dequeued{0};
+
+  std::thread producer([&queue, &producer_done] {
+    for (int i = 0; i < kTotalItems; ++i) {
+      queue.Enqueue(i);
+    }
+    producer_done.store(true, std::memory_order_release);
+  });
+
+  std::thread consumer([&queue, &producer_done, &total_dequeued] {
+    while (true) {
+      if (queue.Dequeue()) {
+        total_dequeued.fetch_add(1, std::memory_order_relaxed);
+      } else if (producer_done.load(std::memory_order_acquire)) {
+        // Drain any remaining items after producer is done
+        while (queue.Dequeue()) {
+          total_dequeued.fetch_add(1, std::memory_order_relaxed);
+        }
+        break;
+      }
+    }
+  });
+
+  producer.join();
+  consumer.join();
+
+  EXPECT_EQ(total_dequeued.load(), kTotalItems);
 }
 
 TEST(QueueTest, DestructorWithRemainingItems) {

@@ -55,6 +55,7 @@ void FreeList<Node, Traits>::Push(Node *node) {
     node->next.store(old_head, std::memory_order_relaxed);
   } while (not head_.compare_exchange_weak(
       old_head, node, std::memory_order_release, std::memory_order_relaxed));
+  ++count_;
 }
 
 template <typename Node, typename Traits>
@@ -69,6 +70,7 @@ Node *FreeList<Node, Traits>::Pop() {
     }
   } while (not head_.compare_exchange_weak(
       old_head, next, std::memory_order_release, std::memory_order_relaxed));
+  count_--;
   return old_head;
 }
 
