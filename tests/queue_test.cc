@@ -30,19 +30,19 @@ TEST(QueueTest, FIFOOrdering) {
 
 TEST(QueueTest, ConcurrentEnqueueDequeue) {
   jglockfree::Queue<int> queue{};
-  constexpr std::size_t kNumProducers = 8;
-  constexpr std::size_t kNumConsumers = 8;
-  constexpr std::size_t kItemsPerProducer = 100'000;
+  constexpr int kNumProducers = 8;
+  constexpr int kNumConsumers = 8;
+  constexpr int kItemsPerProducer = 100'000;
 
   std::atomic<std::size_t> total_dequeued{0};
   std::vector<std::thread> producers;
   std::vector<std::thread> consumers;
-  producers.reserve(kNumProducers);
-  consumers.reserve(kNumConsumers);
+  producers.reserve(static_cast<std::size_t>(kNumProducers));
+  consumers.reserve(static_cast<std::size_t>(kNumConsumers));
 
-  for (std::size_t p = 0; p < kNumProducers; ++p) {
+  for (int p = 0; p < kNumProducers; ++p) {
     producers.emplace_back([&queue, p] {
-      for (std::size_t i = 0; i < kItemsPerProducer; ++i) {
+      for (int i = 0; i < kItemsPerProducer; ++i) {
         queue.Enqueue(p * kItemsPerProducer + i);
       }
     });
@@ -120,10 +120,11 @@ TEST(QueueTest, DestructorAfterDrain) {
     EXPECT_EQ(witness.use_count(), 3);
 
     // Drain the queue
-    queue.Dequeue();
-    queue.Dequeue();
+    auto first = queue.Dequeue();
+    auto second = queue.Dequeue();
 
-    EXPECT_EQ(witness.use_count(), 1);
+    // first and second still hold references to witness
+    EXPECT_EQ(witness.use_count(), 3);
 
     // Queue destructor runs with queue empty (but dummy node exists)
   }
@@ -155,6 +156,7 @@ TEST(QueueTest, DestructorWithMoveOnlyType) {
     queue.Enqueue(CountsDestructor{3});
 
     // Some destructors called for temporaries during enqueue
+    [[maybe_unused]]
     int count_after_enqueue = destructor_count;
 
     // Queue destructor runs

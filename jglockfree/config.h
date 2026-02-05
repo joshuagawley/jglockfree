@@ -16,8 +16,8 @@ struct DefaultTraits {
   static constexpr std::size_t kCacheLineSize = 64;
 #endif
 
-  static constexpr std::size_t kSpinCount = 1000;
-  static constexpr std::size_t kDefaultHazardSlots = 128;
+  static constexpr int kSpinCount = 1000;
+  static constexpr int kDefaultHazardSlots = 128;
 };
 
 }  // namespace jglockfree

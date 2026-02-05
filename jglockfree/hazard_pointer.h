@@ -139,7 +139,7 @@ constexpr void HazardPointer<Traits, NumSlots>::Scan() {
   // for small N (<= 256), use linear search
   if constexpr (NumSlots > 256) {
     std::sort(std::begin(protected_ptrs),
-              std::next(std::begin(protected_ptrs), count),
+              std::next(std::begin(protected_ptrs), static_cast<std::int64_t>(count)),
               [](void *a, void *b) { return std::less<void *>{}(a, b); });
   }
 
@@ -156,7 +156,7 @@ constexpr void HazardPointer<Traits, NumSlots>::Scan() {
       return true;
     } else {
       if (std::binary_search(std::begin(protected_ptrs),
-                             std::next(std::begin(protected_ptrs), count),
+                             std::next(std::begin(protected_ptrs), static_cast<std::int64_t>(count)),
                              node.ptr)) {
         return false;
       }

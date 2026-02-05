@@ -235,7 +235,7 @@ BENCHMARK_DEFINE_F(QueueFixture, LockFreeThroughput)(benchmark::State &state) {
     return;
   }
 
-  constexpr std::size_t kItemsPerIteration = 10000;
+  constexpr int kItemsPerIteration = 10000;
 
   for (auto _ : state) {
     if (state.thread_index() == 0) {
@@ -245,7 +245,7 @@ BENCHMARK_DEFINE_F(QueueFixture, LockFreeThroughput)(benchmark::State &state) {
       }
     } else {
       // Consumer: dequeue all items
-      for (std::size_t i = 0; i < kItemsPerIteration; ++i) {
+      for (int i = 0; i < kItemsPerIteration; ++i) {
         while (not lock_free_queue.Dequeue().has_value()) {
           // Spin if empty
         }
@@ -264,7 +264,7 @@ BENCHMARK_DEFINE_F(QueueFixture, MutexThroughput)(benchmark::State &state) {
     return;
   }
 
-  constexpr std::size_t kItemsPerIteration = 10000;
+  constexpr int kItemsPerIteration = 10000;
 
   for (auto _ : state) {
     if (state.thread_index() == 0) {
@@ -274,7 +274,7 @@ BENCHMARK_DEFINE_F(QueueFixture, MutexThroughput)(benchmark::State &state) {
       }
     } else {
       // Consumer: dequeue all items
-      for (std::size_t i = 0; i < kItemsPerIteration; ++i) {
+      for (int i = 0; i < kItemsPerIteration; ++i) {
         while (not mutex_queue.Dequeue().has_value()) {
           // Spin if empty
         }
@@ -289,7 +289,7 @@ BENCHMARK_DEFINE_F(QueueFixture, MutexThroughput)(benchmark::State &state) {
 BENCHMARK_DEFINE_F(QueueFixture, LockFreeLatencyDistribution)(benchmark::State &state) {
   // clang-format on
   std::vector<std::int64_t> latencies;
-  latencies.reserve(state.max_iterations);
+  latencies.reserve(static_cast<std::size_t>(state.max_iterations));
 
   for (auto _ : state) {
     state.PauseTiming();
@@ -330,7 +330,7 @@ BENCHMARK_DEFINE_F(QueueFixture, LockFreeLatencyDistribution)(benchmark::State &
 BENCHMARK_DEFINE_F(QueueFixture, MutexLatencyDistribution)(benchmark::State &state) {
   // clang-format on
   std::vector<std::int64_t> latencies;
-  latencies.reserve(state.max_iterations);
+  latencies.reserve(static_cast<std::size_t>(state.max_iterations));
 
   for (auto _ : state) {
     state.PauseTiming();
@@ -379,7 +379,7 @@ BENCHMARK_DEFINE_F(SpscFixture, SpscTryPaired)(benchmark::State &state) {
   for (auto _ : state) {
     if (state.thread_index() == 0) {
       // Producer: enqueue then signal
-      spsc_queue.TryEnqueue(42);
+      auto _ = spsc_queue.TryEnqueue(42);
       sync_barrier->arrive_and_wait();  // Item is ready
       sync_barrier->arrive_and_wait();  // Wait for consumer
     } else {
@@ -486,14 +486,14 @@ BENCHMARK_DEFINE_F(SpscFixture, SpscTryDequeueOnly)(benchmark::State &state) {
 
   // Pre-fill with one item before starting
   if (state.thread_index() == 0) {
-    spsc_queue.TryEnqueue(42);
+    auto _ = spsc_queue.TryEnqueue(42);
   }
 
   for (auto _ : state) {
     if (state.thread_index() == 0) {
       // Producer: just refill, don't measure
       state.PauseTiming();
-      spsc_queue.TryEnqueue(42);
+      auto _ = spsc_queue.TryEnqueue(42);
       state.ResumeTiming();
       sync_barrier->arrive_and_wait();
     } else {
@@ -514,14 +514,14 @@ BENCHMARK_DEFINE_F(SpscFixture, SpscBlockingDequeueOnly)(benchmark::State &state
 
   // Pre-fill with one item before starting
   if (state.thread_index() == 0) {
-    spsc_queue.TryEnqueue(42);
+    auto _ = spsc_queue.TryEnqueue(42);
   }
 
   for (auto _ : state) {
     if (state.thread_index() == 0) {
       // Producer: just refill, don't measure
       state.PauseTiming();
-      spsc_queue.TryEnqueue(42);
+      auto _ = spsc_queue.TryEnqueue(42);
       state.ResumeTiming();
       sync_barrier->arrive_and_wait();
     } else {
@@ -547,21 +547,21 @@ BENCHMARK_DEFINE_F(SpscFixture, SpscThroughput)(benchmark::State &state) {
     return;
   }
 
-  constexpr std::size_t kItemsPerIteration = 10000;
+  constexpr int kItemsPerIteration = 10000;
 
   for (auto _ : state) {
     // sync_barrier->arrive_and_wait();  // Start together
 
     if (state.thread_index() == 0) {
       // Producer: enqueue all items
-      for (std::size_t i = 0; i < kItemsPerIteration; ++i) {
+      for (int i = 0; i < kItemsPerIteration; ++i) {
         while (not spsc_queue.TryEnqueue(i)) {
           // Spin if full
         }
       }
     } else {
       // Consumer: dequeue all items
-      for (std::size_t i = 0; i < kItemsPerIteration; ++i) {
+      for (int i = 0; i < kItemsPerIteration; ++i) {
         while (not spsc_queue.TryDequeue().has_value()) {
           // Spin if empty
         }
@@ -583,19 +583,19 @@ BENCHMARK_DEFINE_F(SpscFixture, SpscThroughputInternal)(benchmark::State &state)
     return;
   }
 
-  constexpr std::size_t kItemsPerIteration = 10000;
+  constexpr int kItemsPerIteration = 10000;
 
   for (auto _ : state) {
     if (state.thread_index() == 0) {
       // Producer: enqueue all items using internal method (no signalling)
-      for (std::size_t i = 0; i < kItemsPerIteration; ++i) {
+      for (int i = 0; i < kItemsPerIteration; ++i) {
         while (not spsc_queue.TryEnqueueUnsignalled(i)) {
           // Spin if full
         }
       }
     } else {
       // Consumer: dequeue all items using internal method (no signalling)
-      for (std::size_t i = 0; i < kItemsPerIteration; ++i) {
+      for (int i = 0; i < kItemsPerIteration; ++i) {
         while (not spsc_queue.TryDequeueUnsignalled().has_value()) {
           // Spin if empty
         }

@@ -19,7 +19,7 @@
 
 namespace jglockfree {
 
-template <typename T, std::size_t NumSlots, typename Traits = DefaultTraits>
+template <typename T, int NumSlots, typename Traits = DefaultTraits>
 class SpscQueue {
  public:
   SpscQueue() : head_{0}, tail_{0} {}
@@ -52,7 +52,7 @@ class SpscQueue {
   alignas(Traits::kCacheLineSize) std::atomic<std::size_t> tail_;
 };
 
-template <typename T, std::size_t NumSlots, typename Traits>
+template <typename T, int NumSlots, typename Traits>
 SpscQueue<T, NumSlots, Traits>::~SpscQueue() noexcept {
   std::size_t current = head_.load(std::memory_order_relaxed);
   const std::size_t end = tail_.load(std::memory_order_relaxed);
@@ -63,7 +63,7 @@ SpscQueue<T, NumSlots, Traits>::~SpscQueue() noexcept {
   }
 }
 
-template <typename T, std::size_t NumSlots, typename Traits>
+template <typename T, int NumSlots, typename Traits>
 constexpr bool SpscQueue<T, NumSlots, Traits>::TryEnqueueUnsignalled(T value) {
   const std::size_t head = head_.load(std::memory_order_acquire);
   const std::size_t tail = tail_.load(std::memory_order_relaxed);
@@ -79,7 +79,7 @@ constexpr bool SpscQueue<T, NumSlots, Traits>::TryEnqueueUnsignalled(T value) {
   }
 }
 
-template <typename T, std::size_t NumSlots, typename Traits>
+template <typename T, int NumSlots, typename Traits>
 bool SpscQueue<T, NumSlots, Traits>::TryEnqueue(T value) {
   const bool success = TryEnqueueUnsignalled(std::move(value));
   if (success) {
@@ -88,7 +88,7 @@ bool SpscQueue<T, NumSlots, Traits>::TryEnqueue(T value) {
   return success;
 }
 
-template <typename T, std::size_t NumSlots, typename Traits>
+template <typename T, int NumSlots, typename Traits>
 void SpscQueue<T, NumSlots, Traits>::Enqueue(T value) {
   // Fast path: spin for a bit
   for (int i = 0; i < Traits::kSpinCount; ++i) {
@@ -129,7 +129,7 @@ void SpscQueue<T, NumSlots, Traits>::Enqueue(T value) {
   }
 }
 
-template <typename T, std::size_t NumSlots, typename Traits>
+template <typename T, int NumSlots, typename Traits>
 constexpr std::optional<T>
 SpscQueue<T, NumSlots, Traits>::TryDequeueUnsignalled() {
   const std::size_t head = head_.load(std::memory_order_relaxed);
@@ -150,7 +150,7 @@ SpscQueue<T, NumSlots, Traits>::TryDequeueUnsignalled() {
   }
 }
 
-template <typename T, std::size_t NumSlots, typename Traits>
+template <typename T, int NumSlots, typename Traits>
 std::optional<T> SpscQueue<T, NumSlots, Traits>::TryDequeue() {
   std::optional<T> result = TryDequeueUnsignalled();
   if (result.has_value()) {
@@ -159,7 +159,7 @@ std::optional<T> SpscQueue<T, NumSlots, Traits>::TryDequeue() {
   return result;
 }
 
-template <typename T, std::size_t NumSlots, typename Traits>
+template <typename T, int NumSlots, typename Traits>
 T SpscQueue<T, NumSlots, Traits>::Dequeue() {
   // Fast path: spin for a bit
   for (std::size_t i = 0; i < Traits::kSpinCount; ++i) {
