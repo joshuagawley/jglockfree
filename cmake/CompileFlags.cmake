@@ -51,21 +51,12 @@ function(
         list(APPEND LINK_FLAGS -fsanitize=thread)
     endif ()
 
-    if (CMAKE_CXX_COMPILER_ID MATCHES ".*Clang")
-        set(PROJECT_WARNINGS_CXX ${CLANG_WARNINGS})
-    elseif (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
-        set(PROJECT_WARNINGS_CXX ${GCC_WARNINGS})
-    endif ()
-
-    # use the same warning flags for C
-    set(PROJECT_WARNINGS_C "${PROJECT_WARNINGS_CXX}")
-
     target_compile_options(
             ${common_target_name}
             INTERFACE
-            $<$<COMPILE_LANGUAGE:CXX>:${PROJECT_WARNINGS_CXX}>
-            $<$<COMPILE_LANGUAGE:C>:${PROJECT_WARNINGS_C}>
-            $<$<COMPILE_LANGUAGE:CUDA>:${PROJECT_WARNINGS_CUDA}>)
+            $<$<COMPILE_LANGUAGE:CXX>:${COMPILE_FLAGS}>
+            $<$<COMPILE_LANGUAGE:C>:${COMPILE_FLAGS}>
+            $<$<COMPILE_LANGUAGE:CUDA>:${COMPILE_FLAGS}>)
     target_link_options(${common_target_name} INTERFACE ${LINK_FLAGS})
 
 endfunction(set_project_compile_flags)
